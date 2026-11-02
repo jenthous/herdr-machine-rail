@@ -11,7 +11,7 @@ herdr-core runs separate sessions on one computer (`HC_SESSION`, `hc machine add
 ## Features
 
 - **Rail.** One tile per computer (machine entries grouped by `host`), this one first. A small count when it has several sessions; a dot when an agent there is blocked, done or working while you look elsewhere.
-- **Session chips.** The chosen computer's sessions with their space counts; `+ Session` opens the Sessions window.
+- **Session chips.** The chosen computer's sessions with their space counts; `+` opens the Sessions window.
 - **Filtered sidebar.** Spaces and Agents show only the chosen session. When a space elsewhere becomes active (`agent.next`, a notification, the picker), the rail follows it. Switching returns to the space you last had there.
 - **Yours.** Right-click a tile or chip: rename, one of nine muted colors, move up/down. Or drag to reorder. Names are display only (an `hc machine rename` would change terminal addresses).
 - **Sessions window** (`⌘⇧S`). Per computer: every hc session, running or not, its live terminal count, its sidebar name and its spaces. Connect one (`hc machine add <target> --name <machine>-<session> --session <session>`), disconnect it (`hc machine rm`; its terminals keep running), or make a new one.

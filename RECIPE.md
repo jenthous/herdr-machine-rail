@@ -19,7 +19,7 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
 - **Header (66 px, `chrome`, 1 px `border` below):**
   - Title row 28 px (10 px top, 14 px sides): a 7 px color dot when colored, then the computer's name, 13 px semibold.
   - Chips row 36 px (10 px sides, 4 px gap): one chip per session, 24 px high, 9 px padding, radius 6, 12 px: a 7 px color dot when colored, the session's name (`default` for the default session), its space count 10.5 px `dim` (or its state, `needs login`), and a 6 px status dot when not chosen. Chosen: `selected` background, `foreground` text; others `muted`, `hover` on hover.
-  - Last, a bordered 24 px chip `+ Session` (`Manage sessions` for this computer) that opens the Sessions window.
+  - Last, a bordered 24 px chip `+` (`Manage sessions` for this computer) that opens the Sessions window.
 - **Spaces / Agents:** Herdr's own lists, filtered to the chosen session. An empty session shows one `+ New space` row; an unreachable one shows its state.
 - **Menu (popup 256×300 at the pointer, `popover`):** a `dim` 11 px title "Machine · name" or "Session · name"; "Rename" (`⌃⌘R` hint on computers), which becomes an input (hint "Name (empty: the original)") and a Save button; a row of nine 16 px round swatches and a `×` for none (the chosen one ringed in `foreground`); a divider; "Move up"/"Move down" (chips: "Move left"/"Move right"); a divider; "Manage sessions" with `⌘⇧S`.
   - Colors: indigo `#5e6ad2`, ocean `#3d7ea6`, teal `#2f8a80`, moss `#5f8a5b`, amber `#b0873e`, rust `#b0634b`, rose `#b05a78`, plum `#7d62a8`, slate `#64748b`.
