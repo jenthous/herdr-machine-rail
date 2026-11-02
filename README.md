@@ -28,7 +28,7 @@ English or Korean, following your system (macOS language, else `$LANG`). To pick
 
 1. Copy `layouts/machine-rail.json` and `layouts/machine-rail.png` into `~/.config/herdr-app/layouts/`, and the four folders in `mods/` into `~/.config/herdr-app/mods/`.
 2. Merge `keys.json` into `~/.config/herdr-app/keys.json`.
-3. `herdr-app check ~/.config/herdr-app/mods/<each>`, then `herdr-app do layout.switch --name machine-rail` (or `⌃⇧L`).
+3. `herdr-app check ~/.config/herdr-app/mods/<each>`, then `herdr-app do layout.switch --name machine-rail` (or `⌘⇧L`).
 
 Or ask the agent in your Herdr terminal: *"add herdr.dev/layouts/jenthous/herdr-machine-rail"*.
 

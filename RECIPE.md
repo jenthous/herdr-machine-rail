@@ -25,7 +25,7 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
   - Colors: indigo `#5e6ad2`, ocean `#3d7ea6`, teal `#2f8a80`, moss `#5f8a5b`, amber `#b0873e`, rust `#b0634b`, rose `#b05a78`, plum `#7d62a8`, slate `#64748b`.
 - **Sessions window (`window` overlay, key `sessions`, kept, 760 px × 80%):**
   - A 44 px header: "Sessions", a `dim` hint, ↻ and ×.
-  - Per computer ("This computer" first): a `monitor`/`server` icon, its name, target and host, `+ 새 세션`.
+  - Per computer ("This computer" first): a `monitor`/`server` icon, its name, target and host, `+ New session`.
   - A card per hc session: a running dot (`done` / `dim`), the name, "n terminals" or "stopped", an `accent` tag "Sidebar: name" when connected, its spaces as chips that select the space, and actions: `Show in app`, `+ space`, `Disconnect` (asks for a second click).
   - A 26 px footer of hints.
 
