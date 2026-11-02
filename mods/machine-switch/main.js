@@ -19,7 +19,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { hc, theme, spaces, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
+import { hc, theme, spaces, agents, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
 import { T, detectLanguage } from "./i18n.js";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
@@ -59,6 +59,19 @@ function urgent(list) {
   return best;
 }
 const spacesOf = (name) => spaces().filter((s) => (s.machine ?? null) === name);
+
+// Agents that need you (blocked, or failed) and agents that finished, on some machine entries.
+// An agent's address is "<machine>/<terminal>"; a local one has no machine part.
+function tally(names) {
+  const want = new Set(names);
+  const n = { blocked: 0, done: 0 };
+  for (const a of agents()) {
+    if (!want.has(a.address.includes("/") ? a.address.split("/")[0] : null)) continue;
+    if (a.status === "blocked" || a.status === "error") n.blocked++;
+    else if (a.status === "done") n.done++;
+  }
+  return n;
+}
 
 // Sort by a saved order; ones it doesn't know keep their place after the known ones.
 function ordered(list, order, id) {
@@ -194,6 +207,12 @@ export default class MachineSwitch extends View {
     openOverlay({ mod: "machine-switch", kind: "popup", at, width: 256, height: 300, props: { menu: { ...menu, rename } } });
   }
 
+  // A tile's corner count, cut out of the rail by a ring of its background.
+  count(t, color, n) {
+    return div().flex_none().min_w(15).h(15).px(3).rounded(8).bg(color).border_1().border_color(t.canvas)
+      .flex().items_center().justify_center().text_size(9).font_bold().text_color("#ffffff").child(n > 99 ? "99+" : String(n));
+  }
+
   dot(t, status, size = 6) {
     return div().flex_none().size(size).rounded(size / 2).bg(status === "blocked" ? t.blocked : status === "done" ? t.done : t.working);
   }
@@ -248,7 +267,7 @@ export default class MachineSwitch extends View {
       .children([
         ...groups.map((g) => {
           const on = g === current;
-          const st = urgent(g.sessions.flatMap((s) => spacesOf(s.name)));
+          const n = tally(g.sessions.map((s) => s.name ?? null));
           const away = g.sessions.every((s) => s.state && s.state !== "connected");
           const fill = COLORS[g.color] ?? null;
           const dropping = this.pressed?.kind === "group" && this.over === g.key && this.pressed.id !== g.key;
@@ -274,7 +293,13 @@ export default class MachineSwitch extends View {
             .when(g.sessions.length > 1, (el) =>
               el.child(div().absolute().right(-6).bottom(-6).px(3).rounded(5).bg(t.canvas).border_1().border_color(t.border).text_size(9).text_color(t.muted).child(String(g.sessions.length))),
             )
-            .when(Boolean(st) && !on, (el) => el.child(div().absolute().right(-3).top(-3).child(this.dot(t, st, 9))));
+            .when(n.blocked + n.done > 0, (el) =>
+              el.child(
+                h_flex().absolute().right(-7).top(-6).gap(2)
+                  .when(n.blocked > 0, (b) => b.child(this.count(t, t.blocked, n.blocked)))
+                  .when(n.done > 0, (b) => b.child(this.count(t, t.done, n.done))),
+              ),
+            );
           return h_flex()
             .id(`ms-railrow-${g.key}`)
             .relative()
