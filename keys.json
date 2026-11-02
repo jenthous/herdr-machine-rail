@@ -1,0 +1,19 @@
+{
+  "global": {
+    "cmd-shift-s": "mod.open:sessions",
+    "ctrl-cmd-up": "machine-switch.prev",
+    "ctrl-cmd-down": "machine-switch.next",
+    "ctrl-cmd-left": "machine-switch.session-prev",
+    "ctrl-cmd-right": "machine-switch.session-next",
+    "ctrl-cmd-r": "machine-switch.rename",
+    "ctrl-cmd-1": "machine-switch.go:1",
+    "ctrl-cmd-2": "machine-switch.go:2",
+    "ctrl-cmd-3": "machine-switch.go:3",
+    "ctrl-cmd-4": "machine-switch.go:4",
+    "ctrl-cmd-5": "machine-switch.go:5",
+    "ctrl-cmd-6": "machine-switch.go:6",
+    "ctrl-cmd-7": "machine-switch.go:7",
+    "ctrl-cmd-8": "machine-switch.go:8",
+    "ctrl-cmd-9": "machine-switch.go:9"
+  }
+}
