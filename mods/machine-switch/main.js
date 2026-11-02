@@ -20,6 +20,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { hc, theme, spaces, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
+import { T, detectLanguage } from "./i18n.js";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
 const RANK = { blocked: 3, done: 2, working: 1 };
@@ -82,6 +83,7 @@ export default class MachineSwitch extends View {
     this.entries = [];
     this.pressed = null; // { kind, id } being dragged
     this.over = null;
+    cx.spawn(async (cx) => { await detectLanguage(); cx.notify(); });
     if (props()?.menu) return this.initMenu(cx);
     this.lastActive = spaces().find((s) => s.active)?.id ?? null;
     this.refresh(cx);
@@ -124,13 +126,13 @@ export default class MachineSwitch extends View {
       return { key, base: list[0].session == null ? list[0].name : list[0].target, list };
     });
     remote.sort((a, b) => a.base.localeCompare(b.base));
-    const all = [{ key: LOCAL, base: "로컬", list: [{ name: null, session: null, state: "connected" }] }, ...remote];
+    const all = [{ key: LOCAL, base: T("local"), list: [{ name: null, session: null, state: "connected" }] }, ...remote];
     return ordered(all, p.order, (g) => g.key).map((g) => ({
       key: g.key,
       label: p.alias[gKey(g.key)] || g.base,
       color: p.color[gKey(g.key)] ?? null,
       sessions: ordered(
-        g.list.map((m) => ({ name: m.name, label: p.alias[sKey(m.name)] || (m.session ?? "기본"), color: p.color[sKey(m.name)] ?? null, state: m.state })),
+        g.list.map((m) => ({ name: m.name, label: p.alias[sKey(m.name)] || (m.session ?? T("defaultSession")), color: p.color[sKey(m.name)] ?? null, state: m.state })),
         p.sessionOrder[g.key] ?? [],
         (s) => s.name ?? LOCAL,
       ),
@@ -364,7 +366,7 @@ export default class MachineSwitch extends View {
           .cursor_pointer()
           .hover((x) => x.bg(t.hover).text_color(t.foreground))
           .on_click(() => run("mod.open", { name: "sessions" }))
-          .child(current.key === LOCAL ? "세션 관리" : "+ 세션"),
+          .child(current.key === LOCAL ? T("manageSessions") : T("addSession")),
       ]);
   }
 
@@ -397,7 +399,8 @@ export default class MachineSwitch extends View {
   initMenu(cx) {
     this.renaming = Boolean(props().menu.rename);
     this.handle = cx.focus_handle();
-    this.input = InputState.new({ placeholder: "이름 (비우면 원래대로)" });
+    this.input = InputState.new({});
+    this.input.on("change", (_e, cx) => cx.notify());
     this.input.set_value(prefs().alias[this.prefKey()] ?? "");
     this.input.on("submit", () => this.saveName());
     if (this.renaming) cx.timer.after(50, () => this.input.focus());
@@ -468,15 +471,21 @@ export default class MachineSwitch extends View {
       .gap(2)
       .bg(t.popover)
       .text_color(t.foreground)
-      .child(div().px(10).pt(4).pb(6).text_size(11).text_color(t.dim).truncate().child(`${group ? "머신" : "세션"} · ${title ?? ""}`))
+      .child(div().px(10).pt(4).pb(6).text_size(11).text_color(t.dim).truncate().child(`${group ? T("machine") : T("session")} · ${title ?? ""}`))
       .child(
         this.renaming
           ? h_flex()
               .px(4)
               .gap(6)
-              .child(Input.new(this.input).flex_1().h(28).px(8).items_center().rounded(6).border_1().border_color(t.accent).bg(t.background).text_size(12.5))
-              .child(this.item(t, "ms-save", "저장", () => this.saveName()))
-          : this.item(t, "ms-rename", "이름 바꾸기", () => { this.renaming = true; this.input.focus(); }, group ? "⌃⌘R" : null),
+              .child(
+                div()
+                  .relative()
+                  .flex_1()
+                  .child(Input.new(this.input).w_full().h(28).px(8).items_center().rounded(6).border_1().border_color(t.accent).bg(t.background).text_size(12.5))
+                  .when(!this.input.value(), (el) => el.child(div().absolute().left(9).top(6).text_size(12).text_color(t.dim).child(T("namePlaceholder")))),
+              )
+              .child(this.item(t, "ms-save", T("save"), () => this.saveName()))
+          : this.item(t, "ms-rename", T("rename"), () => { this.renaming = true; this.input.focus(); }, group ? "⌃⌘R" : null),
       )
       .child(
         h_flex()
@@ -514,10 +523,10 @@ export default class MachineSwitch extends View {
           ]),
       )
       .child(div().h(1).mx(6).my(2).bg(t.border))
-      .child(this.item(t, "ms-up", group ? "위로" : "왼쪽으로", () => this.move(-1)))
-      .child(this.item(t, "ms-down", group ? "아래로" : "오른쪽으로", () => this.move(1)))
+      .child(this.item(t, "ms-up", group ? T("up") : T("left"), () => this.move(-1)))
+      .child(this.item(t, "ms-down", group ? T("down") : T("right"), () => this.move(1)))
       .child(div().h(1).mx(6).my(2).bg(t.border))
-      .child(this.item(t, "ms-manage", "세션 관리", () => { close(); run("mod.open", { name: "sessions" }); }, "⌘⇧S"));
+      .child(this.item(t, "ms-manage", T("manageSessions"), () => { close(); run("mod.open", { name: "sessions" }); }, "⌘⇧S"));
   }
 
   render() {

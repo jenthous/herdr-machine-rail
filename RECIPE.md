@@ -18,18 +18,20 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
   - Every session of it unreachable: 45% opacity.
 - **Header (66 px, `chrome`, 1 px `border` below):**
   - Title row 28 px (10 px top, 14 px sides): a 7 px color dot when colored, then the computer's name, 13 px semibold.
-  - Chips row 36 px (10 px sides, 4 px gap): one chip per session, 24 px high, 9 px padding, radius 6, 12 px: a 7 px color dot when colored, the session's name (`기본` for the default session), its space count 10.5 px `dim` (or its state, `needs login`), and a 6 px status dot when not chosen. Chosen: `selected` background, `foreground` text; others `muted`, `hover` on hover.
-  - Last, a bordered 24 px chip `+ 세션` (`세션 관리` for this computer) that opens the Sessions window.
+  - Chips row 36 px (10 px sides, 4 px gap): one chip per session, 24 px high, 9 px padding, radius 6, 12 px: a 7 px color dot when colored, the session's name (`default` for the default session), its space count 10.5 px `dim` (or its state, `needs login`), and a 6 px status dot when not chosen. Chosen: `selected` background, `foreground` text; others `muted`, `hover` on hover.
+  - Last, a bordered 24 px chip `+ Session` (`Manage sessions` for this computer) that opens the Sessions window.
 - **Spaces / Agents:** Herdr's own lists, filtered to the chosen session. An empty session shows one `+ New space` row; an unreachable one shows its state.
-- **Menu (popup 256×300 at the pointer, `popover`):** a `dim` 11 px title "머신 · name" or "세션 · name"; "이름 바꾸기" (`⌃⌘R` hint on computers), which becomes an input ("이름 (비우면 원래대로)") and a 저장 button; a row of nine 16 px round swatches and a `×` for none (the chosen one ringed in `foreground`); a divider; "위로"/"아래로" (chips: "왼쪽으로"/"오른쪽으로"); a divider; "세션 관리" with `⌘⇧S`.
+- **Menu (popup 256×300 at the pointer, `popover`):** a `dim` 11 px title "Machine · name" or "Session · name"; "Rename" (`⌃⌘R` hint on computers), which becomes an input (hint "Name (empty: the original)") and a Save button; a row of nine 16 px round swatches and a `×` for none (the chosen one ringed in `foreground`); a divider; "Move up"/"Move down" (chips: "Move left"/"Move right"); a divider; "Manage sessions" with `⌘⇧S`.
   - Colors: indigo `#5e6ad2`, ocean `#3d7ea6`, teal `#2f8a80`, moss `#5f8a5b`, amber `#b0873e`, rust `#b0634b`, rose `#b05a78`, plum `#7d62a8`, slate `#64748b`.
 - **Sessions window (`window` overlay, key `sessions`, kept, 760 px × 80%):**
   - A 44 px header: "Sessions", a `dim` hint, ↻ and ×.
-  - Per computer ("이 컴퓨터" first): a `monitor`/`server` icon, its name, target and host, `+ 새 세션`.
-  - A card per hc session: a running dot (`done` / `dim`), the name ("default (기본)"), "터미널 n개" or "멈춤", an `accent` tag "사이드바: name" when connected, its spaces as chips that select the space, and actions: `앱에 연결`, `+ space`, `연결 해제` (asks for a second click).
+  - Per computer ("This computer" first): a `monitor`/`server` icon, its name, target and host, `+ 새 세션`.
+  - A card per hc session: a running dot (`done` / `dim`), the name, "n terminals" or "stopped", an `accent` tag "Sidebar: name" when connected, its spaces as chips that select the space, and actions: `Show in app`, `+ space`, `Disconnect` (asks for a second click).
   - A 26 px footer of hints.
 
 ## How it behaves
+
+- **Language:** every text in English and Korean (`i18n.js`, the same file in `machine-switch` and `sessions`): `language` in `mods/machine-switch/config.json`, else macOS `defaults read -g AppleLanguages`, else `$LC_ALL`/`$LC_MESSAGES`/`$LANG`, else English. Input hints are drawn beside the input (a placeholder can't change after the language is known).
 
 - **Grouping:** `hc machine ls --json` (every 15 s, `temporary` ones skipped) grouped by `host` (else target, else name). Within a computer, the entry without `session` first, then by session name. The computer's name is that entry's name, else the target.
 - **The view:** shared `"machine.view"` = the chosen machine entry's name (null for this computer). `session-spaces` and `session-agents` show only spaces whose `machine` equals it and agents whose address prefix (`name/t7`) equals it (no prefix = this computer).
@@ -67,6 +69,7 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
 - `hc machine rename` changes `name/t7` addresses and the keys of `space.colors`; names here are display only.
 - Nine swatches need the 256 px menu.
 - A popup opened from a key has no pointer to sit at: open it at a fixed spot.
+- `InputState` placeholders are fixed at creation, before the language is read: draw the hint yourself.
 
 ## Done when
 
@@ -74,4 +77,5 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
 - With two sessions of one computer connected (`hc machine add <t> --session a`), the rail shows one tile with a `2` badge and the header shows two chips; choosing a chip lists only that session's spaces and agents.
 - `machine-switch.go:2` chooses the second tile; `agent.next` to an agent on another computer moves the rail there.
 - Right-click → a color tints the tile and fills it when chosen; rename changes the initials; dragging a tile reorders the rail and survives a restart.
-- `⌘⇧S` lists each computer's hc sessions; `앱에 연결` adds a machine entry and its tile's count grows.
+- With `{"language": "en"}` every text is English; without it a Korean macOS shows Korean.
+- `⌘⇧S` lists each computer's hc sessions; `Show in app` adds a machine entry and its tile's count grows.

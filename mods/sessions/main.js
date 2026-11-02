@@ -10,6 +10,7 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { hc, theme, props, closeOverlay, spaces, run, nextCommand } from "herdr";
 import { probe, entryName, validSession } from "./probe.js";
+import { T, detectLanguage } from "./i18n.js";
 
 const I = (name) => `mods/sessions/icons/${name}.svg`;
 const REFRESH_MS = 20000;
@@ -21,7 +22,7 @@ function errorText(r) {
     const e = JSON.parse(r.stdout || r.stderr).error;
     if (e) return [e.message, e.hint].filter(Boolean).join(" — ");
   } catch {}
-  return (r.stderr || r.stdout || "응답이 없습니다").trim();
+  return (r.stderr || r.stdout || T("noAnswer")).trim();
 }
 
 export default class Sessions extends View {
@@ -34,11 +35,12 @@ export default class Sessions extends View {
     this.armed = null; // "host/session" waiting for a second click to disconnect
     this.newFor = null; // host key the new-session field is for
     this.typed = "";
-    this.input = InputState.new({ placeholder: "새 세션 이름 (영문, 숫자, - _ .)" });
+    this.input = InputState.new({});
     this.input.on("change", (_e, cx) => { this.typed = this.input.value(); cx.notify(); });
     this.input.on("submit", (_e, cx) => this.createTyped(cx));
     this.handle = cx.focus_handle();
     this.handle.focus();
+    cx.spawn(async (cx) => { await detectLanguage(); cx.notify(); });
     this.refresh(cx);
     cx.timer.every(REFRESH_MS, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
@@ -64,7 +66,7 @@ export default class Sessions extends View {
       return { ...g, local: false, base, target: base.target, via: base.via, label: base.name };
     });
     remote.sort((a, b) => a.label.localeCompare(b.label));
-    return [{ key: "@local", local: true, entries: [], base: null, label: "이 컴퓨터" }, ...remote];
+    return [{ key: "@local", local: true, entries: [], base: null, label: T("thisComputer") }, ...remote];
   }
 
   // The machine entry that shows this session, if any.
@@ -145,7 +147,7 @@ export default class Sessions extends View {
     if (!g || !validSession(name)) return;
     const found = this.found[g.key];
     if (found?.hc?.some((s) => s.name === name)) {
-      this.errors[g.key] = `${name} 세션은 이미 있습니다`;
+      this.errors[g.key] = T("sessionExists", name);
       cx.notify();
       return;
     }
@@ -202,7 +204,7 @@ export default class Sessions extends View {
   // The spaces the app shows for one machine entry, as chips that go there.
   spaceChips(t, machine) {
     const list = spaces().filter((s) => (s.machine ?? null) === machine);
-    if (!list.length) return div().text_size(11.5).text_color(t.dim).child("space 없음");
+    if (!list.length) return div().text_size(11.5).text_color(t.dim).child(T("noSpaces"));
     return h_flex()
       .flex_wrap()
       .gap(4)
@@ -237,17 +239,17 @@ export default class Sessions extends View {
     const k = `${g.key}/${s.name}`;
     const entry = this.entryFor(g, s.name);
     const busy = this.busy[k];
-    const shownAs = entry ? (entry.name ?? "이 창") : null;
+    const shownAs = entry ? (entry.name ?? T("thisWindow")) : null;
     const state = entry?.name ? this.states?.[entry.name] : null;
     let right;
-    if (busy) right = h_flex().gap(6).items_center().text_size(12).text_color(t.muted).child(this.spinner(t)).child(busy === "adding" ? "연결 중" : "해제 중");
-    else if (g.local && s.name !== "default") right = div().text_size(11.5).text_color(t.dim).child("이 컴퓨터는 기본 세션만 열립니다");
-    else if (!entry) right = this.button(t, `ss-conn-${k}`, "앱에 연결", (cx) => this.connect(g, s.name, cx), { primary: true });
+    if (busy) right = h_flex().gap(6).items_center().text_size(12).text_color(t.muted).child(this.spinner(t)).child(busy === "adding" ? T("connecting") : T("disconnecting"));
+    else if (g.local && s.name !== "default") right = div().text_size(11.5).text_color(t.dim).child(T("localDefaultOnly"));
+    else if (!entry) right = this.button(t, `ss-conn-${k}`, T("connect"), (cx) => this.connect(g, s.name, cx), { primary: true });
     else if (entry.session != null)
       right = h_flex()
         .gap(6)
         .child(this.button(t, `ss-new-${k}`, "+ space", () => run("space.new", { machine: entry.name })))
-        .child(this.button(t, `ss-rm-${k}`, this.armed === k ? "한 번 더: 해제" : "연결 해제", (cx) => this.disconnect(g, s.name, entry, cx), { danger: this.armed === k }));
+        .child(this.button(t, `ss-rm-${k}`, this.armed === k ? T("confirmDisconnect") : T("disconnect"), (cx) => this.disconnect(g, s.name, entry, cx), { danger: this.armed === k }));
     else right = this.button(t, `ss-new-${k}`, "+ space", () => run("space.new", entry.name ? { machine: entry.name } : {}));
     return v_flex()
       .flex_none()
@@ -263,8 +265,8 @@ export default class Sessions extends View {
           .gap(8)
           .items_center()
           .child(this.dot(t, s.running))
-          .child(div().flex_none().text_size(13).font_semibold().text_color(t.foreground).child(s.name === "default" ? "default (기본)" : s.name))
-          .child(div().flex_none().text_size(11.5).text_color(t.dim).child(s.running ? `터미널 ${s.live}개` : "멈춤"))
+          .child(div().flex_none().text_size(13).font_semibold().text_color(t.foreground).child(s.name === "default" ? T("defaultLabel") : s.name))
+          .child(div().flex_none().text_size(11.5).text_color(t.dim).child(s.running ? T("terminals", s.live) : T("stopped")))
           .when(Boolean(shownAs), (el) =>
             el.child(
               h_flex()
@@ -278,7 +280,7 @@ export default class Sessions extends View {
                 .text_size(11)
                 .text_color(t.accent)
                 .child(svg(I("layers")).size(11))
-                .child(`사이드바: ${shownAs}`)
+                .child(T("sidebarAs", shownAs))
                 .when(Boolean(state && state !== "connected"), (el) => el.child(div().text_color(t.blocked).child(`· ${state}`))),
             ),
           )
@@ -313,7 +315,7 @@ export default class Sessions extends View {
           .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim).child(sub))
           .when(!found, (el) => el.child(this.spinner(t)))
           .when(!g.local, (el) =>
-            el.child(this.button(t, `ss-newbtn-${g.key}`, "+ 새 세션", (cx) => {
+            el.child(this.button(t, `ss-newbtn-${g.key}`, T("newSession"), (cx) => {
               this.newFor = this.newFor === g.key ? null : g.key;
               delete this.errors[g.key];
               if (this.newFor) this.input.focus();
@@ -326,9 +328,9 @@ export default class Sessions extends View {
           h_flex()
             .gap(8)
             .child(
-              stop(
+              div().relative().flex_1().child(stop(
                 Input.new(this.input)
-                  .flex_1()
+                  .w_full()
                   .h(30)
                   .px(10)
                   .items_center()
@@ -338,20 +340,21 @@ export default class Sessions extends View {
                   .bg(t.background)
                   .text_size(12.5)
                   .text_color(t.foreground),
-              ),
+              ))
+              .when(!this.typed, (el) => el.child(div().absolute().left(11).top(7).text_size(12).text_color(t.dim).child(T("newSessionPlaceholder")))),
             )
-            .child(this.button(t, `ss-create-${g.key}`, "만들고 연결", (cx) => this.createTyped(cx), { primary: true, disabled: !validSession(this.typed.trim()) })),
+            .child(this.button(t, `ss-create-${g.key}`, T("createConnect"), (cx) => this.createTyped(cx), { primary: true, disabled: !validSession(this.typed.trim()) })),
         ),
       )
       .when(Boolean(this.errors[g.key]), (el) => el.child(div().text_size(12).text_color(t.blocked).child(this.errors[g.key])))
-      .when(Boolean(found?.error), (el) => el.child(div().text_size(12).text_color(t.blocked).child(`세션을 읽지 못했습니다: ${found.error}`)))
+      .when(Boolean(found?.error), (el) => el.child(div().text_size(12).text_color(t.blocked).child(T("readFailed", found.error))))
       .child(
         v_flex()
           .gap(4)
           .children(
             hcAll.length
               ? hcAll.map((s) => this.hcRow(t, g, s))
-              : [div().px(10).text_size(12).text_color(t.dim).child(found ? "없음" : "읽는 중…")],
+              : [div().px(10).text_size(12).text_color(t.dim).child(found ? T("none") : T("reading"))],
           ),
       );
   }
@@ -376,7 +379,7 @@ export default class Sessions extends View {
           .border_b(1)
           .border_color(t.border)
           .child(div().text_size(14).font_semibold().child("Sessions"))
-          .child(div().flex_1().text_size(11.5).text_color(t.dim).child("hc 세션마다 사이드바에 머신 하나로 보입니다"))
+          .child(div().flex_1().text_size(11.5).text_color(t.dim).child(T("hint")))
           .when(this.loading, (el) => el.child(this.spinner(t)))
           .child(this.button(t, "ss-refresh", "↻", (cx) => this.refresh(cx)))
           .child(
@@ -416,7 +419,7 @@ export default class Sessions extends View {
           .border_color(t.border)
           .text_size(11)
           .text_color(t.dim)
-          .child("space를 누르면 이동 · r 새로고침 · Esc 닫기 · 연결 해제해도 그 세션의 터미널은 계속 돕니다"),
+          .child(T("footer")),
       );
   }
 }
