@@ -1,7 +1,7 @@
 // Context menus (Herdr's items). Opened as a popup with
 // props { tab: "pane" | "tab" | "space" | "global", target }.
 // Clone of Herdr's `menu`: a space's menu also picks its color (shared
-// "space.colors", the stripe in session-spaces).
+// "space.colors", the stripe in session-spaces; NO_COLOR for none).
 // ↑/↓ move, Enter runs, Esc closes. An item is [label, command, args];
 // a command "worktree" opens the worktree dialog instead.
 
@@ -10,6 +10,8 @@ import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, shared, setShared } from "herdr";
 
 // The same names and colors as session-spaces' MARK and palette.
+// No color: the grey session-spaces calls NO_COLOR (a name the picker doesn't know would break it).
+const NO_COLOR = "#7c818b";
 const COLORS = [["ansi6", "#22a99a"], ["ansi3", "#e3814f"], ["ansi4", "#5b8def"], ["ansi5", "#8b7cf6"], ["ansi2", "#3fae6a"], ["ansi1", "#d9649a"]];
 
 // Where a space is now: its first terminal's live folder, else where it was made.
@@ -140,6 +142,29 @@ export default class Menu extends View {
               cx.notify();
             }),
         ),
+      )
+      // No color (the default): NO_COLOR, not a missing entry, which Herdr's picker would fill.
+      .child(
+        div()
+          .id("mc-none")
+          .size(16)
+          .flex_none()
+          .rounded(8)
+          .border_1()
+          .border_color(t.input)
+          .flex()
+          .items_center()
+          .justify_center()
+          .text_size(10)
+          .text_color(t.dim)
+          .cursor_pointer()
+          .when(!COLORS.some(([name]) => name === now), (el) => el.border_2().border_color(t.foreground))
+          .hover((s) => s.opacity(0.8))
+          .on_click((_e, cx) => {
+            setShared("space.colors", { ...(shared("space.colors") ?? {}), [id]: NO_COLOR });
+            cx.notify();
+          })
+          .child("×"),
       );
   }
 

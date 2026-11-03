@@ -40,6 +40,9 @@ const FALLBACK = 60000;
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
 const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b7cf6", ansi2: "#3fae6a", ansi1: "#d9649a" };
+// No color: a grey that Herdr's own mods (the picker) can still draw as an
+// avatar, where a name they don't know would break them. The same in space-menu.
+const NO_COLOR = "#7c818b";
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -277,9 +280,8 @@ export default class Spaces extends View {
 
   row({ w, i, g, tree }, t) {
     const on = w.active;
-    const colors = shared("space.colors") ?? {};
-    const color = colors[w.id] ?? "ansi6";
-    const fill = color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const color = (shared("space.colors") ?? {})[w.id];
+    const fill = !color || color === NO_COLOR ? null : color.startsWith("#") ? color : (MARK[color] ?? t[color]);
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -319,7 +321,7 @@ export default class Spaces extends View {
       })
       .on_mouse_down("right", () => this.menu(w))
       // The space's color: a thin stripe on the left edge (not on worktrees, under their checkout).
-      .when(!tree, (el) => el.child(div().absolute().left(2).top(8).bottom(8).w(3).rounded(2).bg(fill)))
+      .when(!tree && Boolean(fill), (el) => el.child(div().absolute().left(2).top(8).bottom(8).w(3).rounded(2).bg(fill)))
       .child(
         h_flex()
           .gap(9)
@@ -348,18 +350,21 @@ export default class Spaces extends View {
   render() {
     const t = theme();
     const collapsed = narrow();
-    const palette = ["ansi6", "ansi3", "ansi4", "ansi5", "ansi2", "ansi1"];
+    // Spaces start without a color: NO_COLOR, written down so Herdr's own mods
+    // (the picker) don't hand them one. Once, the colors given out before go too
+    // ("none", from a version before NO_COLOR, too: the picker can't draw it).
     const sp = spaces();
     const ids = new Set(sp.map(p => p.id));
-    const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
-    let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
+    const blank = !shared("space.colors.blank");
+    const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)).map(([id, c]) => [id, blank || c === "none" ? NO_COLOR : c]));
+    let changed = blank || Object.values(shared("space.colors") ?? {}).includes("none") || Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
     for (const p of sp) {
-      if (kept[p.id] || p.name === "~") continue;
-      const uses = c => Object.values(kept).filter(v => v === c).length;
-      kept[p.id] = palette.reduce((best, c) => uses(c) < uses(best) ? c : best);
+      if (kept[p.id]) continue;
+      kept[p.id] = NO_COLOR;
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
+    if (blank) setShared("space.colors.blank", true);
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(!collapsed, el => el.child("Spaces"))
