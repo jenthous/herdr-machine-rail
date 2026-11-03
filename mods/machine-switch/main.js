@@ -178,15 +178,29 @@ export default class MachineSwitch extends View {
   }
 
   // Follow the active space to its entry, and remember it as that entry's last.
+  // When the space you were on closes (exit in its last terminal), Herdr picks
+  // the next space, maybe on another entry: stay on this entry instead, on its
+  // last space, else its first; with none left, show its empty list.
   follow() {
-    const active = spaces().find((s) => s.active);
+    const all = spaces();
+    const active = all.find((s) => s.active);
     if (!active) return;
     const m = active.machine ?? null;
+    if (active.id !== this.lastActive) {
+      const closed = this.lastActive != null && !all.some((s) => s.id === this.lastActive);
+      this.lastActive = active.id;
+      const view = this.view();
+      if (closed && m !== view) {
+        const mine = spacesOf(view);
+        const last = shared(`machine.space.${view ?? LOCAL}`);
+        const target = mine.find((s) => s.id === last) ?? mine[0];
+        if (target) run("space.select", { id: target.id });
+        return;
+      }
+      if (m !== view) setShared("machine.view", m);
+    }
     const key = `machine.space.${m ?? LOCAL}`;
     if (shared(key) !== active.id) setShared(key, active.id);
-    if (active.id === this.lastActive) return;
-    this.lastActive = active.id;
-    if (m !== this.view()) setShared("machine.view", m);
   }
 
   command(c) {

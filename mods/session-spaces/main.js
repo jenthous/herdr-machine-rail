@@ -2,10 +2,11 @@
 // chosen in the machine-switch mod (shared "machine.view": a machine name, null
 // for this computer). hc keeps one entry per session, so that's one session.
 //
-// Workspace spaces: stable colored avatars, worktrees under their checkout,
-// grouped by machine when more than one is known. After a space's name, the repo
-// its first terminal is in now, only where unusual: branch, ahead/behind. Agent state lives in the agents list, not here. Click to
-// switch, right-click for its menu, drag to reorder.
+// Workspace spaces: a stable color stripe on each, worktrees under their checkout,
+// grouped by machine when more than one is known. Before a space's name, its
+// state (working / blocked / done / idle); after it, the repo its first terminal
+// is in now, only where unusual: branch, ahead/behind. Click to switch,
+// right-click for its menu, drag to reorder.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
@@ -202,7 +203,7 @@ export default class Spaces extends View {
 
   menu(w) {
     // A popup is as tall as its items; height is only the most.
-    openOverlay({ mod: "menu", kind: "popup", width: 200, height: 260, props: { tab: "space", target: { id: w.id } } });
+    openOverlay({ mod: "space-menu", kind: "popup", width: 200, height: 300, props: { tab: "space", target: { id: w.id } } });
   }
 
   // Spaces in order, each worktree space moved under its main checkout's.
@@ -264,6 +265,16 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
+  // Where the avatar was: working spins, blocked (or failed) is a red dot,
+  // done is a check, idle an empty ring. Each a different shape, not just a color.
+  statusMark(status, t) {
+    const slot = div().size(18).flex_none().flex().items_center().justify_center();
+    if (status === "working") return slot.child(svg("mods/session-spaces/icons/spinner.svg").size(11).text_color(t.working).spin(900));
+    if (status === "blocked" || status === "error") return slot.child(div().size(7).rounded(4).bg(t.blocked));
+    if (status === "done") return slot.child(svg("mods/session-spaces/icons/check.svg").size(12).text_color(t.done));
+    return slot.child(div().size(7).rounded(4).border(1.5).border_color(t.idle ?? t.dim));
+  }
+
   row({ w, i, g, tree }, t) {
     const on = w.active;
     const colors = shared("space.colors") ?? {};
@@ -307,12 +318,14 @@ export default class Spaces extends View {
         cx.notify();
       })
       .on_mouse_down("right", () => this.menu(w))
+      // The space's color: a thin stripe on the left edge (not on worktrees, under their checkout).
+      .when(!tree, (el) => el.child(div().absolute().left(2).top(8).bottom(8).w(3).rounded(2).bg(fill)))
       .child(
         h_flex()
           .gap(9)
           .items_center()
-          .when(Boolean(tree), el => el.pl(22).child(svg("mods/workspace-chrome/branch.svg").size(13).text_color(t.dim)))
-          .when(!tree, el => el.child(h_flex().size(18).flex_none().rounded(5).bg(fill).items_center().justify_center().text_size(10.5).font_bold().text_color("#ffffff").child([...w.name][0]?.toUpperCase() ?? "?")))
+          .when(Boolean(tree), el => el.pl(22))
+          .child(this.statusMark(w.status, t))
           .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
       );

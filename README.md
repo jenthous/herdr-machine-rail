@@ -26,7 +26,7 @@ English or Korean, following your system (macOS language, else `$LANG`). To pick
 
 ## Install
 
-1. Copy `layouts/machine-rail.json` and `layouts/machine-rail.png` into `~/.config/herdr-app/layouts/`, and the four folders in `mods/` into `~/.config/herdr-app/mods/`.
+1. Copy `layouts/machine-rail.json` and `layouts/machine-rail.png` into `~/.config/herdr-app/layouts/`, and every folder in `mods/` into `~/.config/herdr-app/mods/`.
 2. Merge `keys.json` into `~/.config/herdr-app/keys.json`.
 3. `herdr-app check ~/.config/herdr-app/mods/<each>`, then `herdr-app do layout.switch --name machine-rail` (or `⌘⇧L`).
 
@@ -48,4 +48,4 @@ Or ask the agent in your Herdr terminal: *"add herdr.dev/layouts/jenthous/herdr-
 - **Files:** none outside the app's shared state (`machine.view`, `machine.prefs`).
 - **Network:** none of its own.
 
-`mods/session-spaces` and `mods/session-agents` are `mod.clone`s of Herdr's `spaces` and `agents` (0.1.x) with a filter added; the rest of their code is Herdr's.
+`mods/session-spaces` and `mods/session-agents` are `mod.clone`s of Herdr's `spaces` and `agents` (0.1.x) with a filter added, and `mods/space-menu` of Herdr's `menu` with a color row for spaces; the rest of their code is Herdr's.

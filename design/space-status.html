@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>Spaces — 상태 표시 시안</title>
+<style>
+  :root {
+    --bg: #111317;
+    --chrome: #17191e;
+    --canvas: #131519;
+    --surface: #23262d;
+    --raised: #2a2d35;
+    --hover: #2a2d35;
+    --selected: #353945;
+    --border: #2c2f37;
+    --border-strong: #3a3e48;
+    --fg: #e6e7ea;
+    --muted: #a3a7b0;
+    --dim: #6e737e;
+    --accent: #a48bf7;
+    --working: #e8c065;
+    --blocked: #ef6b6b;
+    --done: #a48bf7;
+    --idle: #6e737e;
+    --ansi2: #5fc98a;
+    --ansi1: #e06c75;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", sans-serif;
+    padding: 28px; display: flex; flex-direction: column; gap: 18px; align-items: center;
+  }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  .note { color: var(--dim); font-size: 12px; max-width: 900px; text-align: center; }
+  .demo { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 12px; }
+  .demo button { background: transparent; border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 9px; cursor: pointer; color: var(--muted); font: inherit; }
+  .demo button:hover { color: var(--fg); }
+
+  .row-of { display: flex; gap: 22px; flex-wrap: wrap; justify-content: center; }
+  .variant { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .variant .label { font-size: 12px; color: var(--muted); }
+  .variant .label b { color: var(--fg); }
+  .variant .desc { font-size: 11.5px; color: var(--dim); max-width: 290px; text-align: center; min-height: 32px; }
+
+  /* the sidebar (rail + header + spaces) */
+  .app { display: flex; width: 330px; height: 380px; border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; box-shadow: 0 18px 44px rgba(0,0,0,.5); }
+  .rail { width: 52px; flex: none; background: var(--canvas); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 10px; }
+  .tile { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; font-size: 11.5px; font-weight: 700; background: var(--surface); color: var(--muted); }
+  .tile.on { background: var(--accent); color: #fff; }
+  .side { flex: 1; min-width: 0; display: flex; flex-direction: column; background: var(--chrome); }
+  .hdr { flex: none; border-bottom: 1px solid var(--border); }
+  .hdr .t { padding: 10px 14px 0; font-size: 13px; font-weight: 600; height: 28px; }
+  .chips { display: flex; gap: 4px; padding: 0 10px; height: 36px; align-items: center; }
+  .chip { height: 24px; padding: 0 9px; border-radius: 6px; display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+  .chip.on { background: var(--selected); color: var(--fg); }
+  .chip .n { font-size: 10.5px; color: var(--dim); }
+  .sp-head { height: 31px; padding: 0 10px 0 16px; display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: var(--dim); }
+  .list { padding: 0 8px; display: flex; flex-direction: column; }
+
+  .sp { height: 30px; padding: 0 8px; border-radius: 8px; display: flex; align-items: center; gap: 9px; cursor: default; position: relative; }
+  .sp.tree { height: 28px; }
+  .sp:hover { background: var(--hover); }
+  .sp.on { background: var(--selected); }
+  .av { width: 18px; height: 18px; flex: none; border-radius: 5px; display: grid; place-items: center; font-size: 10.5px; font-weight: 700; color: #fff; position: relative; }
+  .branch { margin-left: 22px; width: 13px; height: 13px; flex: none; color: var(--dim); }
+  .name { flex-shrink: 0; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tail { flex: 1; min-width: 0; display: flex; justify-content: flex-end; gap: 5px; font-size: 11.5px; color: var(--dim); white-space: nowrap; overflow: hidden; }
+  .up { color: var(--ansi2); } .down { color: var(--ansi1); }
+
+  /* status marks */
+  .dot { width: 7px; height: 7px; border-radius: 4px; flex: none; }
+  .ring { width: 7px; height: 7px; border-radius: 4px; flex: none; border: 1.5px solid var(--idle); }
+  .spin { width: 10px; height: 10px; flex: none; border-radius: 50%; border: 1.5px solid color-mix(in srgb, var(--working) 30%, transparent); border-top-color: var(--working); animation: spin .9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pulse { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+
+  /* A: mark at the end of the row */
+  .A .mark { width: 12px; flex: none; display: flex; justify-content: center; }
+
+  /* B: badge on the avatar's corner */
+  .B .badge { position: absolute; right: -3px; bottom: -3px; width: 9px; height: 9px; border-radius: 5px; border: 2px solid var(--chrome); }
+  .B .sp.on .badge { border-color: var(--selected); }
+  .B .sp:hover .badge { border-color: var(--hover); }
+  .B .badge.idle { background: var(--chrome); border: 1.5px solid var(--idle); width: 8px; height: 8px; }
+  .B .badge.working { background: var(--working); }
+  .B .badge.blocked { background: var(--blocked); }
+  .B .badge.done { background: var(--done); display: grid; place-items: center; width: 11px; height: 11px; right: -4px; bottom: -4px; }
+  .B .badge.done svg { width: 7px; height: 7px; }
+  .B .tree-mark { position: absolute; left: 30px; top: 50%; margin-top: -4px; width: 8px; height: 8px; border-radius: 4px; }
+
+  /* C: a word at the end, color only when it needs you */
+  .C .word { flex: none; font-size: 11px; padding: 0 6px; height: 17px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+  .C .word.working { color: var(--working); background: color-mix(in srgb, var(--working) 12%, transparent); }
+  .C .word.blocked { color: var(--blocked); background: color-mix(in srgb, var(--blocked) 14%, transparent); }
+  .C .word.done { color: var(--done); background: color-mix(in srgb, var(--done) 14%, transparent); }
+  .C .word.idle { color: var(--dim); }
+
+
+  /* ---- avatar replacements ---- */
+  .slot { width: 18px; height: 18px; flex: none; display: grid; place-items: center; }
+  .slot.tree { margin-left: 22px; width: 13px; }
+  /* D: stripe of the space color on the left edge, status in the avatar's place */
+  .D .sp::before { content: ""; position: absolute; left: 2px; top: 7px; bottom: 7px; width: 3px; border-radius: 2px; background: var(--c); }
+  .D .sp.tree::before { display: none; }
+  /* E: the row itself tinted with the space color */
+  .E .sp { background: color-mix(in srgb, var(--c) 9%, transparent); margin-bottom: 2px; }
+  .E .sp.tree { background: color-mix(in srgb, var(--c) 5%, transparent); }
+  .E .sp:hover { background: color-mix(in srgb, var(--c) 16%, transparent); }
+  .E .sp.on { background: color-mix(in srgb, var(--c) 24%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 45%, transparent); }
+  /* F: the avatar becomes the status: color = space, ring = status */
+  .F .av2 { width: 18px; height: 18px; flex: none; border-radius: 5px; display: grid; place-items: center; font-size: 10px; font-weight: 700; position: relative;
+            background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); }
+  .F .av2.working { box-shadow: 0 0 0 1.5px var(--working); }
+  .F .av2.blocked { box-shadow: 0 0 0 1.5px var(--blocked); }
+  .F .av2 .ok { position: absolute; right: -4px; bottom: -4px; width: 11px; height: 11px; border-radius: 6px; background: var(--done); border: 1.5px solid var(--chrome); display: grid; place-items: center; }
+  .F .av2 .ok svg { width: 7px; height: 7px; }
+  .F .av2.working::after { content: ""; position: absolute; inset: -4px; border-radius: 8px; border: 1.5px solid transparent; border-top-color: var(--working); animation: spin 1.2s linear infinite; }
+  /* G: no color at all, status only; the name carries the color when chosen */
+  .G .sp.on .name { color: var(--c); font-weight: 600; }
+
+  .check { width: 11px; height: 11px; flex: none; }
+  .C .word .check { width: 9px; height: 9px; }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); align-items: center; }
+  .legend span { display: flex; gap: 6px; align-items: center; }
+</style>
+</head>
+<body>
+  <h1>Spaces 상태 표시 — 시안 3개</h1>
+  <div class="note">space의 상태(<code>status</code>: working / idle / blocked / done)를 사이드바 Spaces 행에 표시. 같은 데이터로 세 가지 방식을 나란히 그렸어요. 행 위에 마우스를 올리면 hover 상태도 볼 수 있어요.</div>
+  <div class="demo">
+    <button id="shuffle">상태 섞기</button>
+    <button id="anim">애니메이션 켜기/끄기</button>
+  </div>
+  <div class="legend" id="legend"></div>
+  <div class="row-of" id="variants"></div>
+  <h1 style="margin-top:14px">아바타 대체안 — 아바타 자리를 상태로</h1>
+  <div class="note">아바타를 빼고 그 자리에 상태 표시를 둠. space 색을 어디에 남길지(띠 / 배경 / 옅은 아바타 / 없음)가 차이.</div>
+  <div class="row-of" id="alts"></div>
+
+<script>
+const MARK = ["#22a99a", "#e3814f", "#5b8def", "#8b7cf6", "#3fae6a", "#d9649a"];
+let animated = true;
+let data = [
+  { name: "herdr", color: 0, status: "working", tail: "", active: true },
+  { name: "spike-rail", tree: true, status: "blocked", tail: "↑2" },
+  { name: "fix-follow", tree: true, status: "done", tail: "" },
+  { name: "api-server", color: 2, status: "idle", tail: "api · feat/auth", ahead: 0 },
+  { name: "notes", color: 3, status: "idle", tail: "" },
+  { name: "deploy", color: 1, status: "blocked", tail: "↓1" },
+  { name: "scratch", color: 4, status: "working", tail: "" },
+];
+const CHECK = `<svg class="check" viewBox="0 0 12 12" fill="none" stroke="var(--done)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.3l2.3 2.3 4.7-5"/></svg>`;
+const STATUSES = ["working", "idle", "blocked", "done"];
+const LABEL = { working: "작업 중", idle: "대기", blocked: "확인 필요", done: "완료" };
+const BRANCH = `<svg class="branch" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="4" cy="3.5" r="1.5"/><circle cx="4" cy="12.5" r="1.5"/><circle cx="12" cy="5.5" r="1.5"/><path d="M4 5v6M12 7c0 3-4 2.5-6.5 4.5"/></svg>`;
+
+function tail(s) {
+  return `<div class="tail">${s.tail ? s.tail.split(" ").map(x => x.startsWith("↑") ? `<span class="up">${x}</span>` : x.startsWith("↓") ? `<span class="down">${x}</span>` : `<span>${x}</span>`).join(" ") : ""}</div>`;
+}
+function lead(s, inner = "") {
+  if (s.tree) return BRANCH;
+  return `<div class="av" style="background:${MARK[s.color]}">${s.name[0].toUpperCase()}${inner}</div>`;
+}
+function markA(st) {
+  if (st === "working") return `<div class="spin"></div>`;
+  if (st === "idle") return `<div class="ring"></div>`;
+  if (st === "done") return CHECK;
+  return `<div class="dot ${st === "blocked" && animated ? "pulse" : ""}" style="background:var(--${st})"></div>`;
+}
+
+const VARIANTS = [
+  {
+    id: "A", title: "A · 행 끝 점",
+    desc: "git 정보 뒤 맨 오른쪽에 점. working은 도는 링, blocked는 깜빡임, idle은 빈 링.",
+    row: s => `${lead(s)}<div class="name">${s.name}</div>${tail(s)}<div class="mark">${markA(s.status)}</div>`,
+  },
+  {
+    id: "B", title: "B · 아바타 배지",
+    desc: "아바타 오른쪽 아래에 배지(machine 타일의 연결 점과 같은 방식). 가로 공간을 안 씀.",
+    row: s => s.tree
+      ? `${BRANCH}<div class="name">${s.name}</div>${tail(s)}${markA(s.status)}`
+      : `${lead(s, `<div class="badge ${s.status} ${s.status === "blocked" && animated ? "pulse" : ""}">${s.status === "done" ? CHECK.replace("var(--done)", "#fff").replace("1.9", "2.4") : ""}</div>`)}<div class="name">${s.name}</div>${tail(s)}`,
+  },
+  {
+    id: "C", title: "C · 단어 태그",
+    desc: "행 끝에 짧은 글자. 한눈에 의미가 보이지만 폭을 가장 많이 씀. idle은 흐리게.",
+    row: s => `${lead(s)}<div class="name">${s.name}</div>${tail(s)}<div class="word ${s.status}">${s.status === "working" ? `<div class="spin" style="width:8px;height:8px"></div>` : s.status === "done" ? CHECK : ""}${LABEL[s.status]}</div>`,
+  },
+];
+
+
+const slot = (s) => `<div class="slot ${s.tree ? "tree" : ""}">${markA(s.status)}</div>`;
+const cvar = (s) => MARK[s.color ?? data.slice(0, data.indexOf(s)).reverse().find(x => !x.tree)?.color ?? 0];
+const ALT = [
+  {
+    id: "D", title: "D · 색 띠 + 상태 슬롯",
+    desc: "아바타 자리에 상태 표시. space 색은 왼쪽 가장자리 얇은 띠로만. worktree는 띠 없이 들여쓰기.",
+    row: s => `${slot(s)}<div class="name">${s.name}</div>${tail(s)}`,
+  },
+  {
+    id: "E", title: "E · 행 배경 틴트",
+    desc: "space 색을 행 배경에 옅게. 선택되면 진해지고 테두리. 화려하지만 목록이 길면 시끄러울 수 있음.",
+    row: s => `${slot(s)}<div class="name">${s.name}</div>${tail(s)}`,
+  },
+  {
+    id: "F", title: "F · 아바타 = 상태",
+    desc: "아바타는 두되 옅은 톤으로, 상태는 아바타 테두리로(working은 도는 테두리). 한 칸에 색+상태.",
+    row: s => s.tree
+      ? `${slot(s)}<div class="name">${s.name}</div>${tail(s)}`
+      : `<div class="av2 ${s.status}">${s.name[0].toUpperCase()}${s.status === "done" ? `<div class="ok">${CHECK.replace("var(--done)", "#fff").replace("1.9", "2.4")}</div>` : ""}</div><div class="name">${s.name}</div>${tail(s)}`,
+  },
+  {
+    id: "G", title: "G · 색 없음, 상태만",
+    desc: "가장 담백. 상태 점만 앞에. 선택된 space만 이름에 색. 심심할 수 있음.",
+    row: s => `${slot(s)}<div class="name">${s.name}</div>${tail(s)}`,
+  },
+];
+
+function render() {
+  document.getElementById("legend").innerHTML = STATUSES.map(st => `<span>${markA(st)}${st} — ${LABEL[st]}</span>`).join("");
+  const draw = (list) => list.map(v => `
+    <div class="variant ${v.id}">
+      <div class="label"><b>${v.title}</b></div>
+      <div class="app">
+        <div class="rail"><div class="tile on">MM</div><div class="tile">YS</div><div class="tile">KC</div></div>
+        <div class="side">
+          <div class="hdr"><div class="t">macmini</div>
+            <div class="chips"><div class="chip on">default <span class="n">${data.length}</span></div><div class="chip">queens <span class="n">2</span></div><div class="chip">itemscv <span class="n">1</span></div></div>
+          </div>
+          <div class="sp-head"><span>Spaces</span><span>+</span></div>
+          <div class="list">${data.map(s => `<div class="sp ${s.tree ? "tree" : ""} ${s.active ? "on" : ""}" style="--c:${cvar(s)}">${v.row(s)}</div>`).join("")}</div>
+        </div>
+      </div>
+      <div class="desc">${v.desc}</div>
+    </div>`).join("");
+  document.getElementById("variants").innerHTML = draw(VARIANTS);
+  document.getElementById("alts").innerHTML = draw(ALT);
+}
+document.getElementById("shuffle").onclick = () => { data = data.map(s => ({ ...s, status: STATUSES[Math.floor(Math.random() * 4)] })); render(); };
+document.getElementById("anim").onclick = () => { animated = !animated; document.querySelectorAll(".spin").forEach(e => e.style.animationPlayState = animated ? "running" : "paused"); render(); if (!animated) document.querySelectorAll(".spin").forEach(e => e.style.animation = "none"); };
+render();
+</script>
+</body>
+</html>
