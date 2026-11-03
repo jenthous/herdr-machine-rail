@@ -23,11 +23,14 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
 - **Spaces / Agents:** Herdr's own lists, filtered to the chosen session. An empty session shows one `+ New space` row; an unreachable one shows its state.
 - **Menu (popup 256×300 at the pointer, `popover`):** a `dim` 11 px title "Machine · name" or "Session · name"; "Rename" (`⌃⌘R` hint on computers), which becomes an input (hint "Name (empty: the original)") and a Save button; a row of nine 16 px round swatches and a `×` for none (the chosen one ringed in `foreground`); a divider; "Move up"/"Move down" (chips: "Move left"/"Move right"); a divider; "Manage sessions" with `⌘⇧S`.
   - Colors: indigo `#5e6ad2`, ocean `#3d7ea6`, teal `#2f8a80`, moss `#5f8a5b`, amber `#b0873e`, rust `#b0634b`, rose `#b05a78`, plum `#7d62a8`, slate `#64748b`.
-- **Sessions window (`window` overlay, key `sessions`, kept, 760 px × 80%):**
-  - A 44 px header: "Sessions", a `dim` hint, ↻ and ×.
-  - Per computer ("This computer" first): a `monitor`/`server` icon, its name, target and host, `+ New session`.
-  - A card per hc session: a running dot (`done` / `dim`), the name, "n terminals" or "stopped", an `accent` tag "Sidebar: name" when connected, its spaces as chips that select the space, and actions: `Show in app`, `+ space`, `Disconnect` (asks for a second click).
-  - A 26 px footer of hints.
+- **Sessions window (`window` overlay, key `sessions`, kept, 920 px × 80%):**
+  - A 48 px header: "Sessions", a search field (hint "Find a space or session", `/` key cap), ↻ and ×.
+  - Left, 232 px on `chrome`: "Computers", then one row per computer ("This computer" first): a 26 px `monitor`/`server` tile with a reach dot (green `ansi2` / `dim`), the name, its target or host (and "n sessions" when more than one), and on the right the status dots of its spaces (blocked, working, done) and its space count. The chosen one on `selected`.
+  - Right, the chosen computer: its name 16 px, target and host in mono, `+ New session`.
+    - "Shown in the app · n": a card per connected session: a running dot (green / `dim`), the name (a small `default` tag on the default one), a terminal icon and count or "stopped", the sidebar entry's name in mono after a `layers` icon. Its spaces below as chips that select the space (the active one ringed in `accent`, agent status dots inside); past 12 a dashed `+N more` chip, and a dashed `+ space` chip last. `Disconnect` shows only on hover and asks for a second click (the card turns `blocked`, with Cancel).
+    - "On this computer, not in the app · n": one 38 px row per other session with `+ Show in app` (this computer: "Here the app opens only the default session").
+  - Typing in the search replaces the right side with matches across every computer, grouped by computer: sessions by name (choosing one shows its computer) and spaces the app shows (choosing one selects it). The match is drawn in `accent`; ↑↓ and Enter pick.
+  - A 30 px footer of key caps: ↑↓ computers, / find, n new session, r refresh, esc close; on the right, that disconnecting leaves terminals running.
 
 ## How it behaves
 

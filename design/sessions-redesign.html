@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<title>Sessions — 리디자인 시안</title>
+<style>
+  :root {
+    --bg: #111317;          /* app background behind the overlay */
+    --popover: #1c1e24;
+    --panel: #17191e;       /* left rail */
+    --surface: #23262d;
+    --raised: #2a2d35;
+    --hover: #2f323b;
+    --selected: #353945;
+    --border: #2c2f37;
+    --border-strong: #3a3e48;
+    --fg: #e6e7ea;
+    --muted: #a3a7b0;
+    --dim: #6e737e;
+    --accent: #a48bf7;
+    --working: #e8c065;
+    --blocked: #ef6b6b;
+    --done: #a48bf7;
+    --live: #5fc98a;
+    --mono: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Pretendard", "Apple SD Gothic Neo", sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    padding: 24px;
+  }
+  button { font: inherit; color: inherit; }
+
+  /* ---------- demo controls (not part of the design) ---------- */
+  .demo { display: flex; gap: 8px; align-items: center; color: var(--dim); font-size: 12px; }
+  .demo button { background: transparent; border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 9px; cursor: pointer; color: var(--muted); }
+  .demo button.on { background: var(--selected); color: var(--fg); }
+
+  /* ---------- window ---------- */
+  .win {
+    width: 920px; height: 640px;
+    background: var(--popover);
+    border: 1px solid var(--border-strong);
+    border-radius: 12px;
+    box-shadow: 0 24px 60px rgba(0,0,0,.55);
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+  .head {
+    flex: none; height: 48px; padding: 0 12px 0 16px;
+    display: flex; align-items: center; gap: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .head .title { font-size: 14px; font-weight: 600; }
+  .search {
+    flex: 1; max-width: 360px; height: 28px; margin-left: 8px;
+    display: flex; align-items: center; gap: 7px; padding: 0 9px;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 7px;
+    color: var(--dim);
+  }
+  .search:focus-within { border-color: var(--accent); }
+  .search input { flex: 1; background: none; border: 0; outline: 0; color: var(--fg); font: inherit; font-size: 12.5px; }
+  .search input::placeholder { color: var(--dim); }
+  .kbd {
+    font: 10.5px var(--mono); color: var(--dim);
+    border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 4px; line-height: 15px;
+  }
+  .spacer { flex: 1; }
+  .icon-btn {
+    width: 28px; height: 28px; border-radius: 7px; border: 0; background: transparent;
+    display: grid; place-items: center; color: var(--muted); cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--hover); color: var(--fg); }
+  .icon-btn svg { width: 14px; height: 14px; }
+
+  .body { flex: 1; min-height: 0; display: flex; }
+
+  /* ---------- left: computers ---------- */
+  .rail {
+    flex: none; width: 232px; background: var(--panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; padding: 10px 8px; gap: 2px; overflow-y: auto;
+  }
+  .rail-label { font-size: 11px; color: var(--dim); padding: 6px 8px 4px; letter-spacing: .02em; }
+  .mc {
+    display: flex; align-items: center; gap: 9px;
+    padding: 7px 8px; border-radius: 7px; cursor: pointer; user-select: none;
+  }
+  .mc:hover { background: var(--hover); }
+  .mc.sel { background: var(--selected); }
+  .mc .ic { flex: none; width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; background: var(--raised); color: var(--muted); position: relative; }
+  .mc .ic svg { width: 14px; height: 14px; }
+  .mc .ic .st { position: absolute; right: -2px; bottom: -2px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--panel); background: var(--live); }
+  .mc.sel .ic .st { border-color: var(--selected); }
+  .mc .ic .st.off { background: var(--dim); }
+  .mc .txt { flex: 1; min-width: 0; }
+  .mc .nm { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mc .sub { font-size: 11px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mc .cnt { flex: none; display: flex; gap: 4px; align-items: center; font-size: 11px; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .pip { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+
+  /* ---------- right: sessions of one computer ---------- */
+  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .main-head {
+    flex: none; padding: 16px 20px 12px; display: flex; align-items: center; gap: 10px;
+  }
+  .main-head .nm { font-size: 16px; font-weight: 600; }
+  .main-head .sub { font-size: 12px; color: var(--dim); font-family: var(--mono); }
+  .scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 0 20px 20px; }
+
+  .btn {
+    flex: none; height: 26px; padding: 0 10px; border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    background: var(--raised); border: 1px solid var(--border-strong); color: var(--fg);
+  }
+  .btn:hover { background: var(--hover); }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: var(--hover); color: var(--fg); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #17141f; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger { border-color: var(--blocked); color: var(--blocked); background: rgba(239,107,107,.08); }
+  .btn svg { width: 12px; height: 12px; }
+  .btn:disabled { opacity: .4; cursor: default; }
+
+  .section-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--dim); letter-spacing: .02em; margin: 14px 0 8px;
+  }
+  .section-label::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  /* a connected session */
+  .sess {
+    border: 1px solid var(--border); border-radius: 9px; background: var(--surface);
+    margin-bottom: 8px;
+  }
+  .sess-top { display: flex; align-items: center; gap: 9px; padding: 10px 10px 0 12px; height: 38px; }
+  .sess-top .nm { font-size: 13.5px; font-weight: 600; }
+  .tag { font-size: 10.5px; color: var(--dim); border: 1px solid var(--border-strong); border-radius: 4px; padding: 0 5px; line-height: 16px; }
+  .meta { font-size: 11.5px; color: var(--dim); display: inline-flex; align-items: center; gap: 4px; }
+  .meta svg { width: 11px; height: 11px; }
+  .as { font: 11px var(--mono); color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+  .as svg { width: 11px; height: 11px; color: var(--accent); }
+  .sess .acts { display: flex; gap: 2px; opacity: .0; transition: opacity .1s; }
+  .sess:hover .acts, .sess .acts.keep { opacity: 1; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 9px 12px 12px 28px; }
+  .chip {
+    height: 24px; padding: 0 9px; border-radius: 6px;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--muted); background: var(--popover);
+    border: 1px solid var(--border); cursor: pointer; white-space: nowrap;
+  }
+  .chip:hover { background: var(--hover); color: var(--fg); }
+  .chip.active { color: var(--fg); border-color: var(--accent); background: rgba(164,139,247,.10); }
+  .chip.more { color: var(--dim); border-style: dashed; background: transparent; }
+  .chip.add { color: var(--dim); background: transparent; border-style: dashed; }
+  .chip.add svg { width: 11px; height: 11px; }
+  .empty-spaces { padding: 8px 12px 12px 28px; font-size: 12px; color: var(--dim); display: flex; gap: 8px; align-items: center; }
+
+  .live { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--live); box-shadow: 0 0 0 3px rgba(95,201,138,.14); }
+  .live.off { background: var(--dim); box-shadow: none; }
+
+  /* sessions on that computer the app doesn't show */
+  .row {
+    display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 10px 0 12px;
+    border-radius: 8px;
+  }
+  .row:hover { background: var(--surface); }
+  .row .nm { font-size: 13px; font-weight: 500; color: var(--muted); }
+
+  .newsess { display: flex; gap: 8px; margin-bottom: 8px; }
+  .newsess input {
+    flex: 1; height: 30px; padding: 0 10px; border-radius: 7px; outline: 0;
+    background: var(--panel); border: 1px solid var(--accent); color: var(--fg); font: inherit; font-size: 12.5px;
+  }
+  .newsess input.bad { border-color: var(--blocked); }
+  .err { font-size: 12px; color: var(--blocked); margin: -2px 0 8px; }
+  .hint-line { font-size: 11.5px; color: var(--dim); padding: 2px 12px 10px 28px; margin-top: -4px; }
+
+  /* search results */
+  .res-group { font-size: 11px; color: var(--dim); margin: 14px 0 6px; display: flex; gap: 6px; align-items: center; }
+  .res-group svg { width: 12px; height: 12px; }
+  .res {
+    display: flex; align-items: center; gap: 10px; height: 34px; padding: 0 10px; border-radius: 7px; cursor: pointer;
+  }
+  .res:hover, .res.kb { background: var(--selected); }
+  .res .nm { font-size: 13px; }
+  .res .nm mark { background: none; color: var(--accent); font-weight: 600; }
+  .res .where { font: 11px var(--mono); color: var(--dim); margin-left: auto; }
+
+  .foot {
+    flex: none; height: 30px; padding: 0 16px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px; font-size: 11px; color: var(--dim);
+  }
+  .foot span { display: inline-flex; gap: 5px; align-items: center; }
+  .foot .note { margin-left: auto; }
+
+  .notes { width: 920px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+  .notes h3 { font-size: 13px; color: var(--fg); margin: 6px 0; }
+  .notes li { margin: 2px 0; }
+  .notes code { font-family: var(--mono); font-size: 11.5px; color: var(--fg); }
+</style>
+</head>
+<body>
+
+<div class="demo">
+  시안 상태:
+  <button data-demo="normal" class="on">기본</button>
+  <button data-demo="search">검색 중</button>
+  <button data-demo="new">새 세션 입력</button>
+  <button data-demo="armed">연결 해제 확인</button>
+</div>
+
+<div class="win" id="win">
+  <div class="head">
+    <div class="title">Sessions</div>
+    <label class="search">
+      <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg>
+      <input id="q" placeholder="space·세션 찾기" autocomplete="off" />
+      <span class="kbd">/</span>
+    </label>
+    <div class="spacer"></div>
+    <button class="icon-btn" title="새로고침 (r)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 8a5 5 0 1 1-1.5-3.6M13 2.5v2.5h-2.5"/></svg></button>
+    <button class="icon-btn" title="닫기 (Esc)"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="m4 4 8 8M12 4l-8 8"/></svg></button>
+  </div>
+
+  <div class="body">
+    <nav class="rail" id="rail"></nav>
+    <section class="main" id="main"></section>
+  </div>
+
+  <div class="foot">
+    <span><span class="kbd">↑↓</span> 컴퓨터</span>
+    <span><span class="kbd">/</span> 찾기</span>
+    <span><span class="kbd">n</span> 새 세션</span>
+    <span><span class="kbd">r</span> 새로고침</span>
+    <span><span class="kbd">esc</span> 닫기</span>
+    <span class="note">연결을 해제해도 그 세션의 터미널은 계속 돕니다</span>
+  </div>
+</div>
+
+<div class="notes">
+  <h3>무엇이 바뀌었나</h3>
+  <ul>
+    <li><b>두 칸 구조</b> — 왼쪽은 컴퓨터 목록(레일과 같은 말투), 오른쪽은 고른 컴퓨터의 세션. 다섯 대를 한 화면에 쌓던 긴 스크롤이 없어집니다.</li>
+    <li><b>“앱에 표시 중” / “앱에 없음”으로 나눔</b> — 연결 안 된 세션(<code>weu</code>, <code>wox</code>)은 카드 대신 한 줄로, 버튼도 흰색 대신 보통 버튼.</li>
+    <li><b>보라 배지 정리</b> — <code>사이드바: ys-mac-kc-marketing</code> 알약을 작은 mono 글씨(<code>⧉ ys-mac-kc-marketing</code>)로. 보라색은 “지금 보는 space”와 액션에만 씁니다.</li>
+    <li><b>점 의미 분리</b> — 세션 실행 중은 초록, space 안의 에이전트 상태(작업 중 노랑·끝남 보라·막힘 빨강)는 기존 색 그대로라 헷갈리지 않습니다.</li>
+    <li><b>space가 많으면 접기</b> — 2줄(약 12개)까지 보이고 나머지는 <code>+N개</code>. <code>+ space</code>는 칩 줄 끝 점선 칩으로 옮겨 버튼 수를 줄였습니다.</li>
+    <li><b>연결 해제는 hover 때만</b> — 늘 보이던 해제 버튼을 카드에 마우스를 올릴 때만 보이게 하고, 두 번 눌러 확인하는 흐름은 그대로.</li>
+    <li><b>검색</b> — <code>/</code>로 모든 컴퓨터의 space·세션을 찾아 Enter로 이동.</li>
+    <li><code>default (기본)</code> → <code>default</code> + 작은 <code>기본</code> 태그.</li>
+  </ul>
+</div>
+
+<script>
+const ICON = {
+  monitor: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2.5" width="12" height="8.5" rx="1.5"/><path d="M6 14h4M8 11v3"/></svg>',
+  server: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="2.5" width="11" height="4.5" rx="1.2"/><rect x="2.5" y="9" width="11" height="4.5" rx="1.2"/></svg>',
+  term: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3.5 5 3 3-3 3M8.5 11.5h4"/></svg>',
+  layers: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m8 2 6 3.2-6 3.2-6-3.2z"/><path d="m2 8.5 6 3.2 6-3.2"/></svg>',
+  plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M8 3v10M3 8h10"/></svg>',
+  dots: '<svg viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.3"/><circle cx="8" cy="8" r="1.3"/><circle cx="12.5" cy="8" r="1.3"/></svg>',
+  unlink: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6.5 9.5 9.5 6.5M5 7.5 3.8 8.7a2.5 2.5 0 0 0 3.5 3.5L8.5 11M11 8.5l1.2-1.2a2.5 2.5 0 0 0-3.5-3.5L7.5 5"/></svg>',
+  arrow: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h9M9 5l3 3-3 3"/></svg>',
+};
+
+// From the screenshot. status: working | done | blocked
+const S = (name, status, active) => ({ name, status, active });
+const DATA = [
+  { key: "local", local: true, name: "이 컴퓨터", sub: "", online: true, sessions: [
+    { name: "default", live: true, terms: 5, as: "이 창", spaces: [S("herdr-app-linear"), S("안성"), S("jenthous"), S("wox-board")] },
+  ]},
+  { key: "kc-mac", name: "kc-mac", sub: "kc-macminiui-macmini", online: true, sessions: [
+    { name: "default", live: true, terms: 0, as: "kc-mac", spaces: [] },
+  ]},
+  { key: "macmini", name: "macmini", sub: "dcc", online: true, sessions: [
+    { name: "default", live: true, terms: 6, as: "macmini", spaces: [S("machine_android"), S("machine-web"), S("smaple"), S("ff-td", "done"), S("FusionShot", null, true), S("gnet")] },
+  ]},
+  { key: "weu-mac", name: "weu-mac", sub: "weu-hermes", online: true, sessions: [
+    { name: "default", live: true, terms: 9, as: "weu-mac", spaces: ["Projects","수출바우처","명지대","Daybrake","OPEN AI STARTUP","kakao-cs-runner","Projects","kakao-cs-runner","Projects"].map((n) => S(n)) },
+  ]},
+  { key: "ys-mac", name: "ys-mac", sub: "kc-m4pro-16g", online: true, sessions: [
+    { name: "default", live: true, terms: 5, as: "ys-mac", spaces: [S("wf-workflow"), S("weu"), S("WE-6055 주간보고 말풍선 나누기", "working")] },
+    { name: "kc-marketing", live: true, terms: 23, as: "ys-mac-kc-marketing", spaces: ["sphinx-geo","myowoo","daymark","kdysclinic-web","hjboneos.com","weu-mega-whanhong","fora","weu","weu사이트리뉴얼","WE-5689 인스타버그","WE-5492 바로체험 미니프로그램","review-web","kc-marketing","suminclinic","glambeauty","nds.or.kr","lysbridal","kcmarketing","gigsa.net"].map((n) => S(n)) },
+    { name: "weu", live: false, terms: 0, as: null },
+    { name: "wox", live: false, terms: 0, as: null },
+  ]},
+];
+
+const COLOR = { working: "var(--working)", done: "var(--done)", blocked: "var(--blocked)" };
+const MAX_CHIPS = 12;
+const st = { sel: "ys-mac", q: "", expanded: {}, newFor: null, typed: "", armed: null, kb: 0 };
+const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const valid = (n) => /^[A-Za-z0-9._-]{1,40}$/.test(n) && !/^\.+$/.test(n);
+
+function attention(m) {
+  const all = m.sessions.flatMap((s) => s.spaces ?? []);
+  return { working: all.filter((x) => x.status === "working").length, done: all.filter((x) => x.status === "done").length, spaces: all.length };
+}
+
+function renderRail() {
+  const rail = document.getElementById("rail");
+  rail.innerHTML = '<div class="rail-label">컴퓨터</div>' + DATA.map((m) => {
+    const a = attention(m);
+    const shown = m.sessions.filter((s) => s.as).length;
+    const pips = (a.working ? `<span class="pip" style="background:var(--working)"></span>` : "") + (a.done ? `<span class="pip" style="background:var(--done)"></span>` : "");
+    return `<div class="mc ${st.sel === m.key && !st.q ? "sel" : ""}" data-m="${m.key}">
+      <div class="ic">${m.local ? ICON.monitor : ICON.server}<span class="st ${m.online ? "" : "off"}"></span></div>
+      <div class="txt"><div class="nm">${esc(m.name)}</div><div class="sub">${[m.local ? "" : esc(m.sub), m.sessions.length > 1 ? "세션 " + m.sessions.length : ""].filter(Boolean).join(" · ") || "로컬"}</div></div>
+      <div class="cnt" title="space 수">${pips}<span>${a.spaces}</span></div>
+    </div>`;
+  }).join("");
+  rail.querySelectorAll(".mc").forEach((el) => el.onclick = () => { st.sel = el.dataset.m; st.q = ""; q.value = ""; st.newFor = null; st.armed = null; render(); });
+}
+
+function chipsFor(m, s) {
+  const k = `${m.key}/${s.name}`;
+  const list = s.spaces;
+  if (!list.length) return `<div class="empty-spaces">아직 space가 없습니다 <span class="chip add">${ICON.plus} space</span></div>`;
+  const open = st.expanded[k];
+  const shown = open ? list : list.slice(0, MAX_CHIPS);
+  const rest = list.length - shown.length;
+  return `<div class="chips">${shown.map((x) =>
+      `<span class="chip ${x.active ? "active" : ""}" title="이 space로 이동">${x.status ? `<span class="pip" style="background:${COLOR[x.status]}"></span>` : ""}${esc(x.name)}</span>`).join("")}
+    ${rest > 0 ? `<span class="chip more" data-exp="${k}">+${rest}개</span>` : ""}
+    ${open && list.length > MAX_CHIPS ? `<span class="chip more" data-exp="${k}">접기</span>` : ""}
+    <span class="chip add" title="이 세션에 space 만들기">${ICON.plus} space</span></div>`;
+}
+
+function sessCard(m, s) {
+  const k = `${m.key}/${s.name}`;
+  const armed = st.armed === k;
+  const canRemove = !m.local && s.name !== "default";
+  return `<div class="sess">
+    <div class="sess-top">
+      <span class="live ${s.live ? "" : "off"}" title="${s.live ? "실행 중" : "멈춤"}"></span>
+      <span class="nm">${esc(s.name)}</span>${s.name === "default" ? '<span class="tag">기본</span>' : ""}
+      <span class="meta">${ICON.term}${s.terms}</span>
+      <span class="as" title="사이드바에 이 이름의 머신으로 보입니다">${ICON.layers}${esc(s.as)}</span>
+      <div class="spacer"></div>
+      ${canRemove ? `<div class="acts ${armed ? "keep" : ""}">
+        ${armed
+          ? `<button class="btn ghost" data-cancel>취소</button><button class="btn danger" data-rm="${k}">${ICON.unlink} 한 번 더: 해제</button>`
+          : `<button class="btn ghost" data-rm="${k}" title="앱에서 빼기 (터미널은 계속 돕니다)">${ICON.unlink} 연결 해제</button>`}
+      </div>` : ""}
+    </div>
+    ${chipsFor(m, s)}
+  </div>`;
+}
+
+function hiddenRow(m, s) {
+  return `<div class="row">
+    <span class="live ${s.live ? "" : "off"}"></span>
+    <span class="nm">${esc(s.name)}</span>
+    <span class="meta">${s.live ? ICON.term + s.terms : "멈춤"}</span>
+    <div class="spacer"></div>
+    <button class="btn">${ICON.plus} 앱에 표시</button>
+  </div>`;
+}
+
+function renderMachine() {
+  const m = DATA.find((x) => x.key === st.sel);
+  const shown = m.sessions.filter((s) => s.as);
+  const hidden = m.sessions.filter((s) => !s.as);
+  const typed = st.typed.trim();
+  const exists = m.sessions.some((s) => s.name === typed);
+  return `<div class="main-head">
+      <div class="nm">${esc(m.name)}</div>
+      ${m.sub ? `<div class="sub">${esc(m.sub)}</div>` : ""}
+      <div class="spacer"></div>
+      ${m.local ? "" : `<button class="btn" data-new>${ICON.plus} 새 세션</button>`}
+    </div>
+    <div class="scroll">
+      ${st.newFor === m.key ? `
+        <div class="newsess">
+          <input id="newname" class="${typed && (!valid(typed) || exists) ? "bad" : ""}" placeholder="새 세션 이름 (영문, 숫자, - _ .)" value="${esc(st.typed)}" />
+          <button class="btn primary" ${valid(typed) && !exists ? "" : "disabled"}>만들고 표시</button>
+          <button class="btn ghost" data-cancelnew>취소</button>
+        </div>
+        ${exists ? `<div class="err">${esc(typed)} 세션은 이미 있습니다</div>` : ""}` : ""}
+      <div class="section-label" style="margin-top:2px">앱에 표시 중 · ${shown.length}</div>
+      ${shown.map((s) => sessCard(m, s)).join("")}
+      ${m.local ? `<div class="hint-line">이 컴퓨터는 앱이 기본 세션만 엽니다</div>` : ""}
+      ${hidden.length ? `<div class="section-label">이 컴퓨터에 있지만 앱에 없음 · ${hidden.length}</div>${hidden.map((s) => hiddenRow(m, s)).join("")}` : ""}
+    </div>`;
+}
+
+function renderSearch() {
+  const q = st.q.toLowerCase();
+  const hl = (n) => { const i = n.toLowerCase().indexOf(q); return i < 0 ? esc(n) : esc(n.slice(0, i)) + "<mark>" + esc(n.slice(i, i + q.length)) + "</mark>" + esc(n.slice(i + q.length)); };
+  let html = "", n = 0;
+  for (const m of DATA) {
+    const hits = [];
+    for (const s of m.sessions) {
+      if (s.name.toLowerCase().includes(q)) hits.push({ kind: "session", name: s.name, where: s.as ? "세션" : "세션 · 앱에 없음" });
+      for (const x of s.spaces ?? []) if (x.name.toLowerCase().includes(q)) hits.push({ kind: "space", name: x.name, status: x.status, where: s.as });
+    }
+    if (!hits.length) continue;
+    html += `<div class="res-group">${m.local ? ICON.monitor : ICON.server}${esc(m.name)}</div>` + hits.map((h) =>
+      `<div class="res ${n++ === st.kb ? "kb" : ""}">
+        <span style="width:10px;display:inline-flex;justify-content:center">${h.status ? `<span class="pip" style="background:${COLOR[h.status]}"></span>` : h.kind === "session" ? `<span style="color:var(--dim)">${ICON.layers.replace("<svg", '<svg width="11" height="11"')}</span>` : ""}</span>
+        <span class="nm">${hl(h.name)}</span>
+        <span class="where">${esc(h.where)}</span>
+      </div>`).join("");
+  }
+  return `<div class="main-head"><div class="nm" style="font-size:14px">“${esc(st.q)}” 찾기</div><div class="spacer"></div><span class="meta"><span class="kbd">↵</span> 이동</span></div>
+    <div class="scroll">${html || '<div class="empty-spaces" style="padding-left:0">맞는 space나 세션이 없습니다</div>'}</div>`;
+}
+
+function render() {
+  renderRail();
+  const main = document.getElementById("main");
+  main.innerHTML = st.q ? renderSearch() : renderMachine();
+  main.querySelectorAll("[data-exp]").forEach((el) => el.onclick = () => { st.expanded[el.dataset.exp] = !st.expanded[el.dataset.exp]; render(); });
+  main.querySelectorAll("[data-rm]").forEach((el) => el.onclick = () => { st.armed = st.armed === el.dataset.rm ? null : el.dataset.rm; render(); });
+  main.querySelectorAll("[data-cancel]").forEach((el) => el.onclick = () => { st.armed = null; render(); });
+  main.querySelectorAll("[data-new]").forEach((el) => el.onclick = () => { st.newFor = st.newFor ? null : st.sel; st.typed = ""; render(); document.getElementById("newname")?.focus(); });
+  main.querySelectorAll("[data-cancelnew]").forEach((el) => el.onclick = () => { st.newFor = null; render(); });
+  const inp = document.getElementById("newname");
+  if (inp) inp.oninput = () => { st.typed = inp.value; const p = inp.selectionStart; render(); const n = document.getElementById("newname"); n.focus(); n.setSelectionRange(p, p); };
+}
+
+const q = document.getElementById("q");
+q.oninput = () => { st.q = q.value; st.kb = 0; render(); };
+document.addEventListener("keydown", (e) => {
+  const typing = document.activeElement?.tagName === "INPUT";
+  if (e.key === "/" && !typing) { e.preventDefault(); q.focus(); return; }
+  if (e.key === "Escape") { if (st.q) { st.q = ""; q.value = ""; q.blur(); } else if (st.newFor) st.newFor = null; else st.armed = null; render(); return; }
+  if (typing && !st.q) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    const d = e.key === "ArrowDown" ? 1 : -1;
+    if (st.q) { st.kb = Math.max(0, st.kb + d); }
+    else { const i = DATA.findIndex((m) => m.key === st.sel); st.sel = DATA[(i + d + DATA.length) % DATA.length].key; }
+    render();
+  }
+  if (e.key === "n" && !typing && !DATA.find((m) => m.key === st.sel).local) { e.preventDefault(); document.querySelector("[data-new]")?.click(); }
+});
+
+document.querySelectorAll("[data-demo]").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("[data-demo]").forEach((x) => x.classList.toggle("on", x === b));
+  Object.assign(st, { q: "", newFor: null, typed: "", armed: null, sel: "ys-mac", kb: 0 });
+  q.value = "";
+  if (b.dataset.demo === "search") { st.q = "weu"; q.value = "weu"; }
+  if (b.dataset.demo === "new") { st.newFor = "ys-mac"; st.typed = "kc-marketing"; }
+  if (b.dataset.demo === "armed") { st.armed = "ys-mac/kc-marketing"; }
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
