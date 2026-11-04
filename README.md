@@ -12,7 +12,8 @@ herdr-core runs separate sessions on one computer (`HC_SESSION`, `hc machine add
 
 - **Rail.** One tile per computer (machine entries grouped by `host`), this one first. A small count when it has several sessions; a dot when an agent there is blocked, done or working while you look elsewhere.
 - **Session chips.** The chosen computer's sessions with their space counts; `+` opens the Sessions window.
-- **Filtered sidebar.** Spaces and Agents show only the chosen session. When a space elsewhere becomes active (`agent.next`, a notification, the picker), the rail follows it. Switching returns to the space you last had there.
+- **Filtered sidebar.** Spaces and Agents show only the chosen session. When a space elsewhere becomes active (`agent.next`, a notification, the picker), the rail follows it; when the space you were on closes, it stays. Switching returns to the space you last had there.
+- **Space rows.** Each space shows its agents' state where the avatar was (working spins, blocked dot, done check, idle ring). Right-click for a color (a thin stripe; none by default). Spaces named after a Linear issue (`ENG-142 …`) get a chip with its state, when a Linear API key is found; without one, nothing is asked.
 - **Yours.** Right-click a tile or chip: rename, one of nine muted colors, move up/down. Or drag to reorder. Names are display only (an `hc machine rename` would change terminal addresses).
 - **Sessions window** (`⌘⇧S`). Per computer: every hc session, running or not, its live terminal count, its sidebar name and its spaces. Connect one (`hc machine add <target> --name <machine>-<session> --session <session>`), disconnect it (`hc machine rm`; its terminals keep running), or make a new one.
 
@@ -45,7 +46,8 @@ Or ask the agent in your Herdr terminal: *"add herdr.dev/layouts/jenthous/herdr-
 ## What it touches
 
 - **Programs:** `hc machine ls` (every 15 s), `hc machine add` / `hc machine rm` when you connect or disconnect a session in the Sessions window, and one `sh` script per machine (over `exec`, while that window is open) that lists `~/.local/state/herdr-core/*` and checks each session's socket with `lsof`. It never runs an hc command against a session by name: hc starts a core for any session it is asked about.
-- **Files:** none outside the app's shared state (`machine.view`, `machine.prefs`).
-- **Network:** none of its own.
+- **Spaces list** (`session-spaces`, as Herdr's own): `git status` / `git rev-parse` in each space's folder on its machine when it could have changed, and every 60 s while the window is in front. When a space is named after an issue: `sh -lc` once to read `LINEAR_API_KEY`, else the credential files of herdr-linear and the Linear mod (`~/.config/herdr/plugins/config/jh.linear/credentials`, `~/.config/herdr-linear/credentials`).
+- **Files:** those credential files, read only. Otherwise only the app's shared state: `machine.view`, `machine.prefs`, `space.colors` (`#7c818b` means no color), `linear.states`.
+- **Network:** with a Linear key, `api.linear.app` (one request for all spaces' issues, every 90 s or when they change). None otherwise.
 
-`mods/session-spaces` and `mods/session-agents` are `mod.clone`s of Herdr's `spaces` and `agents` (0.1.x) with a filter added, and `mods/space-menu` of Herdr's `menu` with a color row for spaces; the rest of their code is Herdr's.
+`mods/session-agents` is a `mod.clone` of Herdr's `agents` (0.1.x) with a filter added. `mods/session-spaces` and `mods/space-menu` are copies of [herdr-app-session-spaces](https://github.com/jenthous/herdr-app-session-spaces) (clones of Herdr's `spaces` and `menu`), kept here so this layout needs nothing else; `scripts/sync.sh` refreshes them. The cloned code stays under Herdr's terms.

@@ -1,9 +1,11 @@
-// Session view (clone of Herdr's spaces): only the spaces of the machine entry
-// chosen in the machine-switch mod (shared "machine.view": a machine name, null
-// for this computer). hc keeps one entry per session, so that's one session.
+// Session view (clone of Herdr's spaces). With the machine-switch mod in the
+// layout: only the spaces of the machine entry it chose (shared "machine.view":
+// a machine name, null for this computer); hc keeps one entry per session, so
+// that's one session. Without it: every machine's spaces, under a header per
+// machine once one isn't this computer, as Herdr's own list.
 //
-// Workspace spaces: a stable color stripe on each, worktrees under their checkout,
-// grouped by machine when more than one is known. Before a space's name, its
+// Workspace spaces: a color stripe on the ones given a color (right-click, the
+// space-menu mod beside this one), worktrees under their checkout. Before a space's name, its
 // state (working / blocked / done / idle); after it, the repo its first terminal
 // is in now, only where unusual: branch, ahead/behind. Click to switch,
 // right-click for its menu, drag to reorder.
@@ -11,6 +13,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import * as Linear from "./linear.js";
 
 function find(node, id) {
   if (node?.id === id) return node;
@@ -24,6 +27,14 @@ function find(node, id) {
 // The sidebar's rail goes by its width, not a flag: dragging its edge narrows it too.
 const narrow = () => (find(layout(), "sidebar")?.size?.px ?? Infinity) < 160;
 
+// A block in the layout shows this mod.
+function shows(node, mod) {
+  if (node?.content?.mod === mod) return true;
+  return (node?.children ?? []).some((child) => shows(child, mod));
+}
+// machine-switch chooses the entry to show; without it, show them all.
+const switched = () => shows(layout(), "machine-switch");
+
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
 function place(s, ps) {
@@ -36,6 +47,10 @@ const base = (path) => path.replace(/\/+$/, "").split("/").pop();
 // Changes made outside Herdr (an editor's save, a commit in another app): looked
 // for this often, in repos the list shows, while the window is in front.
 const FALLBACK = 60000;
+// Linear: a space whose name (else its branch) holds an issue identifier shows that issue's state icon
+// before its name. All spaces' issues in one request, again when the set changes and every LINEAR_EVERY.
+// linear.js holds the requests and icons/state-*.svg the icons; without a key nothing shows.
+const LINEAR_EVERY = 90000;
 
 // What a stored color name looks like on an avatar (the same in every mod
 // that draws space avatars): one strong color per hue, light and dark alike.
@@ -43,6 +58,13 @@ const MARK = { ansi6: "#22a99a", ansi3: "#e3814f", ansi4: "#5b8def", ansi5: "#8b
 // No color: a grey that Herdr's own mods (the picker) can still draw as an
 // avatar, where a name they don't know would break them. The same in space-menu.
 const NO_COLOR = "#7c818b";
+
+// The name without the identifier the chip already shows ("KSH-74 샤오홍슈" → "샤오홍슈").
+function withoutId(name, id) {
+  const [key, n] = id.split("-");
+  const rest = name.replace(new RegExp(`(?<![A-Za-z0-9])${key}-0*${n}(?!\\d)[\\s:·|\\-–—]*`, "i"), "").trim();
+  return rest || name;
+}
 
 // A space speaks up only when something in it needs you.
 export function glyph(status) {
@@ -71,6 +93,7 @@ export default class Spaces extends View {
     this.over = null;
     this.machines = [];
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
+    this.lin = { mod: Linear, key: undefined, ids: "", at: 0, busy: false, states: shared("linear.states") ?? {} };
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // `git status` walks the whole tree, on another machine a process there:
@@ -84,6 +107,7 @@ export default class Spaces extends View {
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
     const due = this.due(now, sp, panes());
     if (due.size) this.refreshGit(due, cx);
+    this.checkLinear(now, sp, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
   }
 
@@ -119,6 +143,38 @@ export default class Spaces extends View {
       }
     }
     return due;
+  }
+
+  // The issue a space is about: an identifier in its name, else in its branch.
+  issueOf(w, g) {
+    const m = this.lin.mod;
+    if (!m) return null;
+    return m.idsIn(w.name)[0] ?? m.idsIn(w.branch ?? g?.branch)[0] ?? null;
+  }
+
+  checkLinear(now, sp, cx) {
+    const lin = this.lin;
+    if (lin.busy || lin.key === null) return;
+    const ps = panes();
+    const ids = [...new Set(sp.map((w) => this.issueOf(w, this.git[where(w, ps)])).filter(Boolean))].sort();
+    const key = ids.join(" ");
+    if (!ids.length || (key === lin.ids && now - lin.at < LINEAR_EVERY)) return;
+    lin.ids = key; lin.at = now; lin.busy = true;
+    cx.spawn(async (cx) => {
+      try {
+        lin.key ??= (await lin.mod.loadKey()) ?? null;
+        if (!lin.key) return;
+        const states = await lin.mod.issueStates(lin.key, ids);
+        if (JSON.stringify(states) !== JSON.stringify(lin.states)) {
+          lin.states = states;
+          setShared("linear.states", states);
+          cx.notify();
+        }
+      } catch (e) {
+        // A rejected key stops it; anything else tries again at the next round.
+        if (e?.kind === "auth") lin.key = null;
+      } finally { lin.busy = false; }
+    });
   }
 
   // `key` and the other places in its repo (a commit there moves their ahead/behind).
@@ -230,8 +286,20 @@ export default class Spaces extends View {
     return out;
   }
 
-  // The rows of the chosen machine entry only; its tabs are in machine-switch.
+  // A "+ New space" row for a machine with none (null: this computer).
+  newRow(t, collapsed, m) {
+    return h_flex().id(`new-${m ?? "local"}`).h(28).flex_none().px(8).gap(7).items_center().rounded(7)
+      .text_size(12).text_color(t.dim).hover((st) => st.bg(t.hover).text_color(t.foreground))
+      .on_click(() => run("space.new", m ? { machine: m } : {}))
+      .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, (el) => el.child("New space"));
+  }
+
   grouped(t, collapsed) {
+    return switched() ? this.chosen(t, collapsed) : this.all(t, collapsed);
+  }
+
+  // The rows of the machine entry machine-switch chose; its tabs are in machine-switch.
+  chosen(t, collapsed) {
     const view = shared("machine.view") ?? null;
     const rows = this.ordered().filter((r) => (r.w.machine ?? null) === view);
     const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
@@ -239,11 +307,38 @@ export default class Spaces extends View {
     if (view && machine && machine.state !== "connected")
       return [div().h(28).flex_none().px(8).text_size(12).text_color(t.dim).child(machine.state.replace(/_/g, " "))];
     if (!rows.length && !(view ? machines().some((k) => k.name === view && k.layout === "loading") : false))
-      return [h_flex().id("view-new").h(28).flex_none().px(8).gap(7).items_center().rounded(7)
-        .text_size(12).text_color(t.dim).hover((st) => st.bg(t.hover).text_color(t.foreground))
-        .on_click(() => run("space.new", view ? { machine: view } : {}))
-        .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, (el) => el.child("New space"))];
+      return [this.newRow(t, collapsed, view)];
     return rows.map(draw);
+  }
+
+  // Every machine's rows, under a header per machine once one isn't this computer.
+  // A header folds its machine (kept in localStorage) and has a + for a space there.
+  all(t, collapsed) {
+    const rows = this.ordered();
+    const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
+    const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...this.machines.map((m) => m.name)])].sort();
+    if (!remote.length) return rows.length ? rows.map(draw) : [this.newRow(t, collapsed, null)];
+    return [null, ...remote].flatMap((m) => {
+      const mine = rows.filter((r) => (r.w.machine ?? null) === m);
+      const machine = this.machines.find((k) => k.name === m);
+      const connected = !m || machine?.state === "connected";
+      const folded = this.folded.has(m);
+      const head = h_flex().id(`machine-${m ?? "local"}`).h(26).flex_none().px(collapsed ? 2 : 8).gap(7).items_center().text_size(11).text_color(t.dim)
+        .cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => {
+          folded ? this.folded.delete(m) : this.folded.add(m);
+          localStorage.setItem("machines.folded", JSON.stringify([...this.folded]));
+          cx.notify();
+        })
+        .child(svg(`mods/workspace-chrome/${m ? "server" : "monitor"}.svg`).size(13).flex_none())
+        .when(!collapsed, (el) => el.child(div().flex_1().truncate().child(m ?? "This computer"))
+          .when(!connected, (el) => el.child(div().flex_none().child((machine?.state ?? "asleep").replace(/_/g, " "))))
+          .when(connected, (el) => el.child(div().id(`machine-add-${m ?? "local"}`).flex_none().px(4).rounded(4).hover((s) => s.bg(t.hover).text_color(t.foreground))
+            .on_click((_e, cx) => { cx.stop_propagation(); run("space.new", m ? { machine: m } : {}); }).child("+")))
+          .child(div().size(6).rounded(3).flex_none().bg(connected ? t.ansi2 : t.dim))
+          .child(svg(`mods/workspace-chrome/chevron-${folded ? "right" : "down"}.svg`).size(11).flex_none()));
+      return [head, ...(folded ? [] : mine.length ? mine.map(draw) : connected ? [this.newRow(t, collapsed, m)] : [])];
+    });
   }
 
   // Only what's unusual, after the name: "herdr \u00b7 spike \u21912 \u21931". The repo or
@@ -268,6 +363,15 @@ export default class Spaces extends View {
       .when(g.behind > 0, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`\u2193${g.behind}`)));
   }
 
+  // The space's Linear issue as a chip: its state icon and identifier, tinted with the state's color.
+  issueChip(issue, st, t) {
+    const c = /^#[0-9a-f]{6}$/i.test(st.color ?? "") ? st.color : null;
+    return h_flex().h(18).px(5).gap(4).flex_none().items_center().rounded(5).border_1()
+      .border_color(c ? `${c}55` : t.border).bg(c ? `${c}1f` : t.raised)
+      .child(svg(this.lin.mod.stateIcon(st)).size(11).flex_none().text_color(c ?? t.dim))
+      .child(div().text_size(11).font_semibold().text_color(t.foreground).child(issue));
+  }
+
   // Where the avatar was: working spins, blocked (or failed) is a red dot,
   // done is a check, idle an empty ring. Each a different shape, not just a color.
   statusMark(status, t) {
@@ -282,6 +386,8 @@ export default class Spaces extends View {
     const on = w.active;
     const color = (shared("space.colors") ?? {})[w.id];
     const fill = !color || color === NO_COLOR ? null : color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const issue = this.issueOf(w, g);
+    const st = issue && this.lin.states[issue];
     return v_flex()
       .relative()
       .id(`space-${w.id}`)
@@ -328,7 +434,8 @@ export default class Spaces extends View {
           .items_center()
           .when(Boolean(tree), el => el.pl(22))
           .child(this.statusMark(w.status, t))
-          .child(div().flex_shrink(0).max_w(150).truncate().text_color(t.foreground).child(w.name))
+          .when(Boolean(st), (el) => el.child(this.issueChip(issue, st, t)))
+          .child(div().flex_shrink(0).max_w(st ? 120 : 150).truncate().text_color(t.foreground).child(st ? withoutId(w.name, issue) : w.name))
           .child(g ? this.gitTail(g, tree, w.name, t) : div().flex_1()),
       );
   }
@@ -350,26 +457,23 @@ export default class Spaces extends View {
   render() {
     const t = theme();
     const collapsed = narrow();
-    // Spaces start without a color: NO_COLOR, written down so Herdr's own mods
-    // (the picker) don't hand them one. Once, the colors given out before go too
-    // ("none", from a version before NO_COLOR, too: the picker can't draw it).
+    // New spaces start without a color: NO_COLOR, written down so Herdr's own
+    // mods (the picker) don't hand them one. Colors spaces already have stay.
     const sp = spaces();
     const ids = new Set(sp.map(p => p.id));
-    const blank = !shared("space.colors.blank");
-    const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)).map(([id, c]) => [id, blank || c === "none" ? NO_COLOR : c]));
-    let changed = blank || Object.values(shared("space.colors") ?? {}).includes("none") || Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
+    const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
+    let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
     for (const p of sp) {
       if (kept[p.id]) continue;
       kept[p.id] = NO_COLOR;
       changed = true;
     }
     if (changed) setShared("space.colors", kept);
-    if (blank) setShared("space.colors.blank", true);
     return v_flex().size_full().min_h(0).bg(t.chrome).text_size(13)
       .child(h_flex().h(31).pl(16).pr(10).items_center().justify_between().text_size(11.5).text_color(t.dim)
         .when(!collapsed, el => el.child("Spaces"))
         .child(div().id("space-new").size(26).flex_none().flex().items_center().justify_center().rounded(6).hover(s => s.bg(t.hover).text_color(t.foreground))
-          .on_click(() => { const v = shared("machine.view") ?? null; run("space.new", v ? { machine: v } : {}); }).child(svg("mods/workspace-chrome/plus.svg").size(14))))
+          .on_click(() => { const v = switched() ? (shared("machine.view") ?? null) : null; run("space.new", v ? { machine: v } : {}); }).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
         .children(this.grouped(t, collapsed)));
