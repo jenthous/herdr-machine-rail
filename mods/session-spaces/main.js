@@ -12,7 +12,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout } from "herdr";
+import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile } from "herdr";
 import * as Linear from "./linear.js";
 
 function find(node, id) {
@@ -93,6 +93,8 @@ export default class Spaces extends View {
     this.over = null;
     this.machines = [];
     this.folded = new Set(JSON.parse(localStorage.getItem("machines.folded") ?? "[]"));
+    // Whether the Linear mod is installed, for where a chip click opens the issue.
+    readTextFile(`${appHome()}/mods/linear/mod.json`).then((f) => { this.hasLinearMod = Boolean(f); }, () => {});
     this.lin = { mod: Linear, key: undefined, ids: "", at: 0, busy: false, states: shared("linear.states") ?? {} };
     this.refreshMachines(cx);
     cx.timer.every(15000, cx => this.refreshMachines(cx));
@@ -364,9 +366,22 @@ export default class Spaces extends View {
   }
 
   // The space's Linear issue as a chip: its state icon and identifier, tinted with the state's color.
+  // A click on the chip opens the issue: in the Linear mod's window when it's installed, else in the browser.
+  openIssue(issue, st, cx) {
+    if (this.hasLinearMod) {
+      run("mod.open", { name: "linear" });
+      // The window takes a moment to start listening for commands.
+      cx.timer.after(400, () => run(`linear.open:${issue}`));
+    } else cx.open_url(st.url ?? `https://linear.app/issue/${issue}`);
+  }
+
   issueChip(issue, st, t) {
     const c = /^#[0-9a-f]{6}$/i.test(st.color ?? "") ? st.color : null;
-    return h_flex().h(18).px(5).gap(4).flex_none().items_center().rounded(5).border_1()
+    const stop = (_e, cx) => cx.stop_propagation();
+    return h_flex().id(`issue-${issue}`).h(18).cursor_pointer()
+      .on_mouse_down("left", stop)
+      .on_mouse_up("left", (_e, cx) => { cx.stop_propagation(); this.openIssue(issue, st, cx); })
+      .hover((s) => s.border_color(c ?? t.foreground)).px(5).gap(4).flex_none().items_center().rounded(5).border_1()
       .border_color(c ? `${c}55` : t.border).bg(c ? `${c}1f` : t.raised)
       .child(svg(this.lin.mod.stateIcon(st)).size(11).flex_none().text_color(c ?? t.dim))
       .child(div().text_size(11).font_semibold().text_color(t.foreground).child(issue));

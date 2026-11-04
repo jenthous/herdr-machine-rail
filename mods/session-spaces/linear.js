@@ -30,14 +30,14 @@ export async function issueStates(key, ids) {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: key },
     body: JSON.stringify({
-      query: "query States($filter: IssueFilter, $first: Int) { issues(filter: $filter, first: $first) { nodes { identifier state { name type color } } } }",
+      query: "query States($filter: IssueFilter, $first: Int) { issues(filter: $filter, first: $first) { nodes { identifier url state { name type color } } } }",
       variables: { filter, first: Math.min(250, ids.length + 10) },
     }),
   });
   if (res.status === 401) throw Object.assign(new Error("unauthorized"), { kind: "auth" });
   const body = JSON.parse(await res.text());
   if (body.errors?.length) throw new Error(body.errors[0].message);
-  return Object.fromEntries((body.data?.issues?.nodes ?? []).map((i) => [i.identifier, i.state]));
+  return Object.fromEntries((body.data?.issues?.nodes ?? []).map((i) => [i.identifier, { ...i.state, url: i.url }]));
 }
 
 // The state icons (the linear mod's, copied): dashed circle backlog, empty todo, half in progress, three-quarter review,
