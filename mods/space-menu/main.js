@@ -1,18 +1,30 @@
 // Context menus (Herdr's items). Opened as a popup with
 // props { tab: "pane" | "tab" | "space" | "global", target }.
-// Clone of Herdr's `menu`: a space's menu also picks its color (shared
-// "space.colors", the row tint in session-spaces; NO_COLOR for none).
+// Clone of Herdr's `menu`: a space's menu also picks its color, from six swatches or any color
+// in the picker behind + (shared
+// "space.colors", the stripe in session-spaces; NO_COLOR for none).
 // ↑/↓ move, Enter runs, Esc closes. An item is [label, command, args];
 // a command "worktree" opens the worktree dialog instead.
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex } from "gpui-base";
+import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, shared, setShared } from "herdr";
 
 // The same names and colors as session-spaces' MARK and palette.
 // No color: the grey session-spaces calls NO_COLOR (a name the picker doesn't know would break it).
 const NO_COLOR = "#7c818b";
 const COLORS = [["ansi6", "#22a99a"], ["ansi3", "#e3814f"], ["ansi4", "#5b8def"], ["ansi5", "#8b7cf6"], ["ansi2", "#3fae6a"], ["ansi1", "#d9649a"]];
+const HEX = /^#?([0-9a-f]{6})$/i;
+
+function hsl(h, s, l) {
+  s /= 100; l /= 100;
+  const k = (n) => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = (n) => Math.round(255 * (l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)))).toString(16).padStart(2, "0");
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+// The picker's palette: eight hues, light to dark.
+const PALETTE = [72, 58, 44].flatMap((l) => [0, 30, 50, 140, 175, 210, 255, 300].map((h) => hsl(h, 65, l)));
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 function place(s) {
@@ -98,6 +110,14 @@ export default class Menu extends View {
     this.git = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
+    // The color picker under the swatches: a palette and a #rrggbb field. A full hex applies as it's typed.
+    this.picking = false;
+    this.typing = false;
+    this.hex = InputState.new({ placeholder: "#rrggbb" });
+    this.hex.on("focus", () => { this.typing = true; });
+    this.hex.on("blur", () => { this.typing = false; });
+    this.hex.on("change", (_e, cx) => { const m = HEX.exec(this.hex.value().trim()); if (m) { this.paint(`#${m[1].toLowerCase()}`); cx.notify(); } });
+    this.hex.on("submit", () => closeOverlay(props()?.overlay));
     const p = props();
     const space = p?.tab === "space" && spaces().find((s) => s.id === p.target?.id);
     const folder = space && place(space);
@@ -116,10 +136,32 @@ export default class Menu extends View {
     else run(it[1], it[2]);
   }
 
-  // A row of swatches for a space's color; the chosen one is ringed.
+  paint(color) {
+    const id = props()?.target?.id;
+    if (id) setShared("space.colors", { ...(shared("space.colors") ?? {}), [id]: color });
+  }
+
+  // The palette and the hex field, under the swatches while picking.
+  picker(t, now) {
+    return v_flex().px(10).pb(8).gap(8)
+      .child(div().flex().flex_wrap().gap(6).children(PALETTE.map((hex, i) =>
+        div().id(`mp-${i}`).size(16).flex_none().rounded(8).bg(hex).cursor_pointer()
+          .when(now === hex, (el) => el.border_2().border_color(t.foreground))
+          .hover((s) => s.opacity(0.8))
+          .on_click((_e, cx) => { this.paint(hex); this.hex.set_value(hex); cx.notify(); }))))
+      .child(h_flex().gap(7).items_center()
+        .child(div().size(16).flex_none().rounded(8).bg(HEX.test(now ?? "") && now !== NO_COLOR ? now : t.raised).border_1().border_color(t.input))
+        .child(div().id("mp-hex").flex_1().min_w(0).h(26).px(8).flex().items_center().rounded(6).border_1()
+          .border_color(this.typing ? t.accent : t.input).cursor_text()
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .child(Input.new(this.hex).h_full().text_size(12).text_color(t.foreground))));
+  }
+
+  // A row of swatches for a space's color; the chosen one is ringed. + opens the picker.
   colors(t) {
     const id = props()?.target?.id;
     const now = (shared("space.colors") ?? {})[id];
+    const custom = HEX.test(now ?? "") && now !== NO_COLOR;
     return h_flex()
       .px(10)
       .pt(4)
@@ -158,13 +200,37 @@ export default class Menu extends View {
           .text_size(10)
           .text_color(t.dim)
           .cursor_pointer()
-          .when(!COLORS.some(([name]) => name === now), (el) => el.border_2().border_color(t.foreground))
+          .when(!now || now === NO_COLOR, (el) => el.border_2().border_color(t.foreground))
           .hover((s) => s.opacity(0.8))
           .on_click((_e, cx) => {
             setShared("space.colors", { ...(shared("space.colors") ?? {}), [id]: NO_COLOR });
             cx.notify();
           })
           .child("×"),
+      )
+      // Any color: + opens the picker; it shows a color picked there, ringed.
+      .child(
+        div()
+          .id("mc-more")
+          .size(16)
+          .flex_none()
+          .rounded(8)
+          .border_1()
+          .border_color(t.input)
+          .flex()
+          .items_center()
+          .justify_center()
+          .text_size(11)
+          .text_color(t.dim)
+          .cursor_pointer()
+          .when(custom, (el) => el.bg(now).border_2().border_color(t.foreground))
+          .hover((s) => s.opacity(0.8))
+          .on_click((_e, cx) => {
+            this.picking = !this.picking;
+            if (this.picking) { this.hex.set_value(custom ? now : ""); this.hex.focus(); }
+            cx.notify();
+          })
+          .when(!custom, (el) => el.child("+")),
       );
   }
 
@@ -180,6 +246,7 @@ export default class Menu extends View {
       .bg(t.popover)
       .text_size(12.8)
       .on_key_down((e, cx) => {
+        if (this.typing) { if (e.key === "escape") closeOverlay(props().overlay); return; }
         if (e.key === "down") this.at = (this.at + 1) % list.length;
         else if (e.key === "up") this.at = (this.at + list.length - 1) % list.length;
         else if (e.key === "enter") this.choose(this.at, cx);
@@ -208,6 +275,7 @@ export default class Menu extends View {
             .child(div().text_size(11).text_color(t.dim).child(shortcut(it[1], it[2])))),
         ),
       )
-      .when(props()?.tab === "space", (el) => el.child(div().mx(7).my(4).h(1).bg(t.border)).child(this.colors(t)));
+      .when(props()?.tab === "space", (el) => el.child(div().mx(7).my(4).h(1).bg(t.border)).child(this.colors(t))
+        .when(this.picking, (el) => el.child(this.picker(t, (shared("space.colors") ?? {})[props()?.target?.id]))));
   }
 }
