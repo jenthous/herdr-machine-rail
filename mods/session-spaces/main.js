@@ -4,7 +4,7 @@
 // that's one session. Without it: every machine's spaces, under a header per
 // machine once one isn't this computer, as Herdr's own list.
 //
-// Workspace spaces: a color stripe on the ones given a color (right-click, the
+// Workspace spaces: a tinted row for the ones given a color (right-click, the
 // space-menu mod beside this one), worktrees under their checkout. Before a space's name, its
 // state (working / blocked / done / idle); after it, the repo its first terminal
 // is in now, only where unusual: branch, ahead/behind. Click to switch,
@@ -400,7 +400,9 @@ export default class Spaces extends View {
   row({ w, i, g, tree }, t) {
     const on = w.active;
     const color = (shared("space.colors") ?? {})[w.id];
-    const fill = !color || color === NO_COLOR ? null : color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    const hex = !color || color === NO_COLOR ? null : color.startsWith("#") ? color : (MARK[color] ?? t[color]);
+    // The space's color tints the row: light at rest, stronger on hover, strongest when active.
+    const fill = /^#[0-9a-f]{6}$/i.test(hex ?? "") ? hex : null;
     const issue = this.issueOf(w, g);
     const st = issue && this.lin.states[issue];
     return v_flex()
@@ -411,8 +413,9 @@ export default class Spaces extends View {
       .flex_none()
       .justify_center()
       .rounded(8)
-      .when(on, (el) => el.bg(t.selected))
-      .when(!on, (el) => el.hover((s) => s.bg(t.hover)))
+      .when(on, (el) => el.bg(fill ? `${fill}4d` : t.selected))
+      .when(!on && Boolean(fill), (el) => el.bg(`${fill}24`).hover((s) => s.bg(`${fill}38`)))
+      .when(!on && !fill, (el) => el.hover((s) => s.bg(t.hover)))
       .when(this.pressed === i && this.over !== i, (el) => el.opacity(0.5))
       .when(this.pressed !== null && this.over === i && this.pressed !== i, (el) => el.child(
         div().absolute().left(0).right(0).h(2).bg(t.accent)
@@ -441,8 +444,6 @@ export default class Spaces extends View {
         cx.notify();
       })
       .on_mouse_down("right", () => this.menu(w))
-      // The space's color: a thin stripe on the left edge (not on worktrees, under their checkout).
-      .when(!tree && Boolean(fill), (el) => el.child(div().absolute().left(2).top(8).bottom(8).w(3).rounded(2).bg(fill)))
       .child(
         h_flex()
           .gap(9)
@@ -474,10 +475,14 @@ export default class Spaces extends View {
     const collapsed = narrow();
     // New spaces start without a color: NO_COLOR, written down so Herdr's own
     // mods (the picker) don't hand them one. Colors spaces already have stay.
+    // A color is never dropped because its space is missing: right after start a
+    // remote machine's spaces aren't listed until it connects. Only NO_COLOR
+    // entries of missing spaces go, since they say nothing a new entry wouldn't.
     const sp = spaces();
     const ids = new Set(sp.map(p => p.id));
-    const kept = Object.fromEntries(Object.entries(shared("space.colors") ?? {}).filter(([id]) => ids.has(id)));
-    let changed = Object.keys(kept).length !== Object.keys(shared("space.colors") ?? {}).length;
+    const stored = shared("space.colors") ?? {};
+    const kept = Object.fromEntries(Object.entries(stored).filter(([id, c]) => ids.has(id) || c !== NO_COLOR));
+    let changed = Object.keys(kept).length !== Object.keys(stored).length;
     for (const p of sp) {
       if (kept[p.id]) continue;
       kept[p.id] = NO_COLOR;

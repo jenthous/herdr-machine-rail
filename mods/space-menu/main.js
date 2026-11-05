@@ -1,7 +1,7 @@
 // Context menus (Herdr's items). Opened as a popup with
 // props { tab: "pane" | "tab" | "space" | "global", target }.
 // Clone of Herdr's `menu`: a space's menu also picks its color (shared
-// "space.colors", the stripe in session-spaces; NO_COLOR for none).
+// "space.colors", the row tint in session-spaces; NO_COLOR for none).
 // ↑/↓ move, Enter runs, Esc closes. An item is [label, command, args];
 // a command "worktree" opens the worktree dialog instead.
 
