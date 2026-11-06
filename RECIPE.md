@@ -49,6 +49,7 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
   - Connect runs `hc machine add [--via] <target> --name <base>-<slug(session)> --session <session> --json`, which also creates a new session; disconnect runs `hc machine rm <name>`.
   - This computer only lists its sessions: the app shows its default session.
 
+- **Update check:** `mods/machine-switch/update.js` (the same file in herdr-machine-rail and herdr-app-linear, after Git Graph's). The header copy (`style: "chips"`) asks on start and every 15 min; the pill sits at the right of the title row, 18 px high. At most once a day, one GET to `api.github.com/repos/jenthous/herdr-machine-rail/releases/latest` (no token, nothing about the person), remembered in shared `"machine-rail.update"` (`checked`, `latest`, `dismissed`, `off`). A release tag newer than `VERSION` (`0.1.0`) shows a pill in the header: a 6 px `accent` dot and "Update Machine Rail" (`Machine Rail 업데이트`), 11.5 px `accent`. Clicking it opens a 460×400 dialog (this mod again, props `{ role: "update", lang }`): "Machine Rail vX is out", the installed version, the prompt to give the agent in mono, the release notes as markdown, then "Stop checking" (never ask again), Later (hide this tag), Release page, Copy prompt.
 ## Built from
 
 - **Layout:** `layouts/machine-rail.json`, Herdr's `main` with `sidebar-lists` replaced by `sidebar-body` (row, not resizable):

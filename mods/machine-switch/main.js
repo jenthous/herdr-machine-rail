@@ -20,7 +20,18 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { hc, theme, spaces, agents, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
-import { T, detectLanguage } from "./i18n.js";
+import { T, detectLanguage, currentLang } from "./i18n.js";
+import { makeUpdater } from "./update.js";
+
+// Release check: the header shows "Update Machine Rail" when a newer release is out.
+const UPDATER = makeUpdater({
+  repo: "jenthous/herdr-machine-rail",
+  version: "0.1.0",
+  key: "machine-rail.update",
+  mod: "machine-switch",
+  name: "Machine Rail",
+  prompt: "Update the machine-rail layout from github.com/jenthous/herdr-machine-rail",
+});
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
 const RANK = { blocked: 3, done: 2, working: 1 };
@@ -97,10 +108,13 @@ export default class MachineSwitch extends View {
     this.pressed = null; // { kind, id } being dragged
     this.over = null;
     cx.spawn(async (cx) => { await detectLanguage(); cx.notify(); });
+    if (props()?.role === "update") { this.update = new UPDATER.Update(); return this.update.init(cx); }
     if (props()?.menu) return this.initMenu(cx);
     this.lastActive = spaces().find((s) => s.active)?.id ?? null;
     this.refresh(cx);
     cx.timer.every(15000, (cx) => this.refresh(cx));
+    // The header copy asks (at most once a day, shared across copies).
+    if (props()?.style === "chips") { UPDATER.check(); cx.timer.every(15 * 60 * 1000, () => UPDATER.check()); }
     // One copy takes the keys: in this layout both the rail and the chips run.
     if ((props()?.style ?? "rail") === "rail") {
       cx.spawn(async (cx) => {
@@ -428,7 +442,9 @@ export default class MachineSwitch extends View {
           .items_center()
           .on_mouse_down("right", () => this.openMenu({ kind: "group", key: current.key }))
           .when(Boolean(fill), (el) => el.child(div().flex_none().size(7).rounded(4).bg(fill)))
-          .child(div().min_w(0).truncate().text_size(13).font_semibold().text_color(t.foreground).child(current.label)),
+          .child(div().min_w(0).truncate().text_size(13).font_semibold().text_color(t.foreground).child(current.label))
+          .child(div().flex_1())
+          .when(Boolean(UPDATER.available()), (el) => el.child(UPDATER.pill(t, currentLang(), 18))),
       )
       .child(this.chips(t, current));
   }
@@ -569,6 +585,7 @@ export default class MachineSwitch extends View {
   }
 
   render() {
+    if (this.update) return this.update.render();
     const t = theme();
     if (props()?.menu) return this.menuView(t);
     const groups = this.groups();

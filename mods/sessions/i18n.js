@@ -129,6 +129,9 @@ const STR = {
 
 let lang = "en";
 
+/** The language settled by detectLanguage ("en" until then). */
+export const currentLang = () => lang;
+
 /** The text for `key` in the current language; functions take their values. */
 export function T(key, ...args) {
   const v = STR[lang][key] ?? STR.en[key] ?? key;
