@@ -1,6 +1,7 @@
 {
   "global": {
     "cmd-shift-s": "mod.open:sessions",
+    "cmd-shift-m": "mod.open:machine-stats",
     "ctrl-cmd-up": "machine-switch.prev",
     "ctrl-cmd-down": "machine-switch.next",
     "ctrl-cmd-left": "machine-switch.session-prev",

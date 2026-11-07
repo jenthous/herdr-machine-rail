@@ -26,7 +26,7 @@ import { makeUpdater } from "./update.js";
 // Release check: the header shows "Update Machine Rail" when a newer release is out.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.1.0",
+  version: "0.2.0",
   key: "machine-rail.update",
   mod: "machine-switch",
   name: "Machine Rail",

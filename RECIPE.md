@@ -49,7 +49,13 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
   - Connect runs `hc machine add [--via] <target> --name <base>-<slug(session)> --session <session> --json`, which also creates a new session; disconnect runs `hc machine rm <name>`.
   - This computer only lists its sessions: the app shows its default session.
 
-- **Update check:** `mods/machine-switch/update.js` (the same file in herdr-machine-rail and herdr-app-linear, after Git Graph's). The header copy (`style: "chips"`) asks on start and every 15 min; the pill sits at the right of the title row, 18 px high. At most once a day, one GET to `api.github.com/repos/jenthous/herdr-machine-rail/releases/latest` (no token, nothing about the person), remembered in shared `"machine-rail.update"` (`checked`, `latest`, `dismissed`, `off`). A release tag newer than `VERSION` (`0.1.0`) shows a pill in the header: a 6 px `accent` dot and "Update Machine Rail" (`Machine Rail 업데이트`), 11.5 px `accent`. Clicking it opens a 460×400 dialog (this mod again, props `{ role: "update", lang }`): "Machine Rail vX is out", the installed version, the prompt to give the agent in mono, the release notes as markdown, then "Stop checking" (never ask again), Later (hide this tag), Release page, Copy prompt.
+- **Machine Stats (`window` overlay, key `machine-stats`, 760×420, `⌘⇧M`):** nothing runs while closed; on open and every 5 s, one `sh -c` (`probe.js`, POSIX, Darwin or Linux) per computer over `exec {on}`, one at a time per computer. Computers as the rail groups them, with its names, colors and order.
+  - A 46 px header: "Machines" 14 px semibold, "Read while this window is open · every 5s" `dim`, then the update pill when one waits, `EN`/`한` (the other language), ↻ and ×.
+  - Columns: the name (130 px, a 7 px color dot) then five equal heat cells, 40 px high, radius 6: CPU (the busiest process below), memory (used / total), swap (used), disk (free), load / core (load / cores). The percentage 13.5 px semibold, the detail 10.5 px at 75%. Background `accent`, from 75% `working` (text `background`), from 90% `blocked`, alpha 6% + 85% × use.
+  - Click a row: OS, cores, uptime, sizes, load 1/5/15 and five processes (CPU %, RSS, name). Unreachable: the error in `blocked`; an old reading keeps showing with "n s old".
+  - A 32 px footer, "Busiest": the busiest process anywhere at 50% or more, and memory or disk at 85% or more.
+  - Language: shared `"machine-stats.lang"` (the `EN`/`한` button or `l`), else `machine-switch/config.json`, else the system's. `r` reloads, Esc closes.
+- **Update check:** `mods/machine-switch/update.js` (the same file in `machine-stats`, and in herdr-app-linear, after Git Graph's). Machine Stats asks too when opened and shows the same pill, 22 px high, from the same shared state. The header copy (`style: "chips"`) asks on start and every 15 min; the pill sits at the right of the title row, 18 px high. At most once a day, one GET to `api.github.com/repos/jenthous/herdr-machine-rail/releases/latest` (no token, nothing about the person), remembered in shared `"machine-rail.update"` (`checked`, `latest`, `dismissed`, `off`). A release tag newer than `VERSION` (`0.2.0`) shows a pill in the header: a 6 px `accent` dot and "Update Machine Rail" (`Machine Rail 업데이트`), 11.5 px `accent`. Clicking it opens a 460×400 dialog (this mod again, props `{ role: "update", lang }`): "Machine Rail vX is out", the installed version, the prompt to give the agent in mono, the release notes as markdown, then "Stop checking" (never ask again), Later (hide this tag), Release page, Copy prompt.
 ## Built from
 
 - **Layout:** `layouts/machine-rail.json`, Herdr's `main` with `sidebar-lists` replaced by `sidebar-body` (row, not resizable):
@@ -61,6 +67,7 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
   - `machine-switch`: rail, header and its own right-click menu as `props.menu`.
   - `session-agents`: `mod.clone` of Herdr's `agents`. Added: the `machine.view` filter, `+` making the space on the viewed machine.
   - `session-spaces`, `space-menu`: copies from herdr-app-session-spaces (their home; `scripts/sync.sh` copies them, `scripts/synced-from` names the commit). `session-spaces` filters to `machine.view` when a block of the layout shows `machine-switch`; `space-menu` adds the space color row to Herdr's `menu`.
+  - `machine-stats`: the Machine Stats window (`main.js`), its probe (`probe.js`) and `update.js`.
   - `sessions`: the window (`main.js`) and its probe (`probe.js`). Shipped mods used: `workspace-chrome` (icons), `machine-add`.
 - **herdr:** `hc`, `exec {on}`, `spaces`, `run` (`space.select`, `space.new {machine}`, `mod.open`), `shared`/`setShared`, `openOverlay`/`closeOverlay`, `nextCommand`, `theme`, `props`.
 - **gpui:** `InputState`/`Input`, `h_flex`/`v_flex`, `svg(...).spin()`.
@@ -78,9 +85,10 @@ Herdr's main layout with a Slack-style rail of computers inside the sidebar: pic
 
 ## Done when
 
-- `herdr-app check` passes for all four mods and `layout.switch {name: "machine-rail"}` shows the rail.
+- `herdr-app check` passes for every mod in `mods/` and `layout.switch {name: "machine-rail"}` shows the rail.
 - With two sessions of one computer connected (`hc machine add <t> --session a`), the rail shows one tile with a `2` badge and the header shows two chips; choosing a chip lists only that session's spaces and agents.
 - `machine-switch.go:2` chooses the second tile; `agent.next` to an agent on another computer moves the rail there.
 - Right-click → a color tints the tile and fills it when chosen; rename changes the initials; dragging a tile reorders the rail and survives a restart.
 - With `{"language": "en"}` every text is English; without it a Korean macOS shows Korean.
+- `⌘⇧M` shows every reachable computer's CPU, memory, swap, disk and load; `l` switches English/Korean and stays after reopening.
 - `⌘⇧S` lists each computer's hc sessions; `Show in app` adds a machine entry and its tile's count grows.
