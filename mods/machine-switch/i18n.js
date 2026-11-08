@@ -65,6 +65,12 @@ const STR = {
     keyRefresh: "refresh",
     keyClose: "close",
     keepsRunning: "Disconnecting leaves its terminals running",
+    coreUpdate: (from, to) => `hc ${from} → ${to}`,
+    coreBadge: (from, to) => `herdr-core ${from} → ${to} available`,
+    coreHint: "Update herdr-core on this computer (its terminals keep running)",
+    coreConfirm: "Again to update hc",
+    coreUpdating: "Updating hc…",
+    coreFailed: "hc update failed",
   },
   ko: {
     local: "로컬",
@@ -124,6 +130,12 @@ const STR = {
     keyRefresh: "새로고침",
     keyClose: "닫기",
     keepsRunning: "연결을 해제해도 그 세션의 터미널은 계속 돕니다",
+    coreUpdate: (from, to) => `hc ${from} → ${to}`,
+    coreBadge: (from, to) => `herdr-core ${from} → ${to} 업데이트 있음`,
+    coreHint: "이 컴퓨터의 herdr-core 업데이트 (터미널은 계속 돕니다)",
+    coreConfirm: "한 번 더: hc 업데이트",
+    coreUpdating: "hc 업데이트 중…",
+    coreFailed: "hc 업데이트 실패",
   },
 };
 

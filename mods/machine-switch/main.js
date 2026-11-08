@@ -15,6 +15,9 @@
 //
 // props.style: "rail" (the tiles) or "chips" (the header beside them).
 // props.menu: { kind: "group" | "session", key, group? } — the right-click menu.
+// herdr-core updates: a tile whose computer runs an older hc than the newest
+// gets an ↑ badge; its header offers to update it (core.js).
+//
 // Keys (keys.json): machine-switch.next / prev / go:N / session-next / session-prev / rename.
 
 import { View, div, svg } from "gpui-kit";
@@ -22,11 +25,12 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { hc, theme, spaces, agents, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
 import { T, detectLanguage, currentLang } from "./i18n.js";
 import { makeUpdater } from "./update.js";
+import { latestCore, checkCore, localCore, behind, updateCore } from "./core.js";
 
 // Release check: the header shows "Update Machine Rail" when a newer release is out.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.2.0",
+  version: "0.3.0",
   key: "machine-rail.update",
   mod: "machine-switch",
   name: "Machine Rail",
@@ -107,6 +111,8 @@ export default class MachineSwitch extends View {
     this.entries = [];
     this.pressed = null; // { kind, id } being dragged
     this.over = null;
+    this.localVersion = null; // this computer's running hc
+    this.core = null; // header: { key, step: "confirm" | "busy" | "failed", error }
     cx.spawn(async (cx) => { await detectLanguage(); cx.notify(); });
     if (props()?.role === "update") { this.update = new UPDATER.Update(); return this.update.init(cx); }
     if (props()?.menu) return this.initMenu(cx);
@@ -114,7 +120,11 @@ export default class MachineSwitch extends View {
     this.refresh(cx);
     cx.timer.every(15000, (cx) => this.refresh(cx));
     // The header copy asks (at most once a day, shared across copies).
-    if (props()?.style === "chips") { UPDATER.check(); cx.timer.every(15 * 60 * 1000, () => UPDATER.check()); }
+    if (props()?.style === "chips") {
+      UPDATER.check();
+      checkCore();
+      cx.timer.every(15 * 60 * 1000, () => { UPDATER.check(); checkCore(); });
+    }
     // One copy takes the keys: in this layout both the rail and the chips run.
     if ((props()?.style ?? "rail") === "rail") {
       cx.spawn(async (cx) => {
@@ -135,6 +145,7 @@ export default class MachineSwitch extends View {
         const r = await hc(["machine", "ls", "--json"]);
         if (r.code === 0) this.entries = (JSON.parse(r.stdout).machines ?? []).filter((m) => !m.temporary);
       } catch {}
+      this.localVersion = (await localCore()) ?? this.localVersion;
       cx.notify();
     });
   }
@@ -153,11 +164,12 @@ export default class MachineSwitch extends View {
       return { key, base: list[0].session == null ? list[0].name : list[0].target, list };
     });
     remote.sort((a, b) => a.base.localeCompare(b.base));
-    const all = [{ key: LOCAL, base: T("local"), list: [{ name: null, session: null, state: "connected" }] }, ...remote];
+    const all = [{ key: LOCAL, base: T("local"), list: [{ name: null, session: null, state: "connected", version: this.localVersion }] }, ...remote];
     return ordered(all, p.order, (g) => g.key).map((g) => ({
       key: g.key,
       label: p.alias[gKey(g.key)] || g.base,
       color: p.color[gKey(g.key)] ?? null,
+      outdated: behind(g.list, latestCore()),
       sessions: ordered(
         g.list.map((m) => ({ name: m.name, label: p.alias[sKey(m.name)] || (m.session ?? T("defaultSession")), color: p.color[sKey(m.name)] ?? null, state: m.state })),
         p.sessionOrder[g.key] ?? [],
@@ -298,6 +310,7 @@ export default class MachineSwitch extends View {
           const n = tally(g.sessions.map((s) => s.name ?? null));
           const away = g.sessions.every((s) => s.state && s.state !== "connected");
           const fill = COLORS[g.color] ?? null;
+          const old = g.outdated.length > 0;
           const dropping = this.pressed?.kind === "group" && this.over === g.key && this.pressed.id !== g.key;
           const tile = div()
             .id(`ms-rail-${g.key}`)
@@ -321,6 +334,11 @@ export default class MachineSwitch extends View {
             .when(g.sessions.length > 1, (el) =>
               el.child(div().absolute().right(-6).bottom(-6).px(3).rounded(5).bg(t.canvas).border_1().border_color(t.border).text_size(9).text_color(t.muted).child(String(g.sessions.length))),
             )
+            // An older hc there: an ↑ at the bottom left.
+            .when(old, (el) =>
+              el.child(div().absolute().left(-6).bottom(-6).size(15).rounded(8).bg(t.accent).border_1().border_color(t.canvas)
+                .flex().items_center().justify_center().text_size(9).font_bold().text_color(t.accent_foreground).child("↑")))
+            .when(old, (el) => el.tooltip(T("coreBadge", g.outdated[0].version, latestCore())))
             .when(n.blocked + n.done > 0, (el) =>
               el.child(
                 h_flex().absolute().right(-7).top(-6).gap(2)
@@ -444,9 +462,39 @@ export default class MachineSwitch extends View {
           .when(Boolean(fill), (el) => el.child(div().flex_none().size(7).rounded(4).bg(fill)))
           .child(div().min_w(0).truncate().text_size(13).font_semibold().text_color(t.foreground).child(current.label))
           .child(div().flex_1())
+          .when(current.outdated.length > 0 || this.core?.key === current.key, (el) => el.child(this.corePill(t, current)))
           .when(Boolean(UPDATER.available()), (el) => el.child(UPDATER.pill(t, currentLang(), 18))),
       )
       .child(this.chips(t, current));
+  }
+
+  // "hc 0.1.18 → 0.1.19" while the shown computer runs an older hc: a first click
+  // asks again (its hc restarts; terminals keep running), the second updates it.
+  corePill(t, g) {
+    const c = this.core?.key === g.key ? this.core : null;
+    const latest = latestCore();
+    const label = c?.step === "busy" ? T("coreUpdating") : c?.step === "confirm" ? T("coreConfirm")
+      : c?.step === "failed" ? T("coreFailed") : T("coreUpdate", g.outdated[0]?.version ?? "", latest ?? "");
+    const color = c?.step === "failed" ? t.blocked : t.accent;
+    return h_flex().id("ms-core").h(18).px(7).gap(5).flex_none().items_center().rounded(6).text_size(11.5)
+      .text_color(color).cursor_pointer().hover((s) => s.bg(t.hover))
+      .tooltip(c?.step === "failed" ? c.error : T("coreHint"))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => {
+        if (c?.step === "busy") return;
+        if (c?.step !== "confirm") { this.core = { key: g.key, step: "confirm" }; cx.notify(); return; }
+        this.core = { key: g.key, step: "busy" };
+        cx.notify();
+        const outdated = g.outdated, local = this.localVersion;
+        cx.spawn(async (cx) => {
+          const error = await updateCore(outdated, local, latest);
+          this.core = error ? { key: g.key, step: "failed", error } : null;
+          this.refresh(cx);
+          cx.notify();
+        });
+      })
+      .child(div().size(6).rounded(3).bg(color))
+      .child(label);
   }
 
   // ---- the right-click menu (this mod again, as a popup) ----
