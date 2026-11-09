@@ -30,7 +30,7 @@ import { latestCore, checkCore, localCore, behind, updateCore } from "./core.js"
 // Release check: the header shows "Update Machine Rail" when a newer release is out.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.3.0",
+  version: "0.3.1",
   key: "machine-rail.update",
   mod: "machine-switch",
   name: "Machine Rail",

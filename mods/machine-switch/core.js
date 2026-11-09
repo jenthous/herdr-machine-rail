@@ -39,7 +39,7 @@ export async function localCore() {
   } catch { return null; }
 }
 
-/** The entries (`{ name, version }`, name null for this computer) running an hc older than `latest`. */
+/** The entries (`{ name, session, version }`, name null for this computer) running an hc older than `latest`. */
 export function behind(entries, latest) {
   if (!latest) return [];
   return entries.filter((e) => e.version && newer(latest, e.version));
@@ -54,9 +54,23 @@ export async function updateCore(outdated, local, latest) {
     const r = await hc(args);
     if (r.code !== 0) throw new Error((r.stderr || r.stdout || `hc ${args.join(" ")}`).trim().split("\n").pop());
   };
+  // Its other sessions share that file: restart their cores instead of installing
+  // again, which would leave a core already restarted on a replaced file ("no holder:
+  // holder build … differs from core build"). The call loses its line as the core
+  // restarts; that is the expected end.
+  const restart = async (name) => {
+    const r = await hc(["exec", "--on", name, "sh", "-c",
+      'p=$(command -v herdr-core) || p=$HOME/.local/bin/herdr-core; exec "$p" server restart']);
+    const out = `${r.stderr ?? ""}${r.stdout ?? ""}`;
+    if (r.code !== 0 && !/lost the line/.test(out)) throw new Error(out.trim().split("\n").pop() || `restart ${name}`);
+  };
   try {
     if (local && newer(latest, local)) await run(["update"]);
-    for (const e of outdated) if (e.name) await run(["machine", "update", e.name]);
+    const remote = outdated.filter((e) => e.name);
+    // The computer's own entry (no session) first: it's the one that installs.
+    remote.sort((a, b) => (a.session ? 1 : 0) - (b.session ? 1 : 0));
+    if (remote[0]) await run(["machine", "update", remote[0].name]);
+    for (const e of remote.slice(1)) await restart(e.name);
     return null;
   } catch (err) {
     return String(err?.message ?? err).slice(0, 200);
