@@ -9,10 +9,14 @@
 // state (working / blocked / done / idle); after it, the repo its first terminal
 // is in now, only where unusual: branch, ahead/behind. Click to switch,
 // right-click for its menu, drag to reorder.
+//
+// Under the spaces, "Background": terminals running with no tab and no parent
+// shown in one (`hc run --bg --no-parent`, a script started outside Herdr), on
+// the shown machine entry; a click peeks at one (terminal.peek: keep-as-tab there).
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile } from "herdr";
+import { spaces, machines, panes, terminals, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile } from "herdr";
 import * as Linear from "./linear.js";
 
 function find(node, id) {
@@ -470,6 +474,38 @@ export default class Spaces extends View {
       .child(div().text_color(tone(t, w.status)).child(glyph(w.status)));
   }
 
+  // Live terminals of the shown entry that no tab shows, directly or under a parent.
+  loose() {
+    const ps = panes();
+    const inPane = new Set(ps.map((p) => p.terminal).filter(Boolean));
+    const all = terminals();
+    const live = new Map(all.map((k) => [k.address, k.state === "live"]));
+    const view = switched() ? (shared("machine.view") ?? null) : undefined;
+    return all.filter((k) => {
+      if (k.state !== "live" || inPane.has(k.address)) return false;
+      if (k.parent && inPane.has(k.parent) && live.get(k.parent)) return false;
+      if (view === undefined) return true;
+      const m = k.address.includes("/") ? k.address.split("/")[0] : null;
+      return m === view;
+    });
+  }
+
+  background(t) {
+    const list = this.loose();
+    if (!list.length) return [];
+    const ago = (ms) => { const m = Math.floor((Date.now() - ms) / 60000); return m < 1 ? "<1m" : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`; };
+    return [
+      div().h(28).mt(10).px(8).flex().items_center().text_size(11.5).text_color(t.dim).child(`Background ${list.length}`),
+      ...list.map((k) => h_flex().id(`bg-${k.address}`).h(28).px(8).gap(9).items_center().rounded(6).cursor_pointer()
+        .hover((x) => x.bg(t.hover))
+        .on_click(() => run("terminal.peek", { terminal: k.address }))
+        .child(div().size(14).flex_none().flex().items_center().justify_center()
+          .child(k.status ? div().text_color(tone(t, k.status)).child(glyph(k.status)) : div().size(6).rounded(3).bg(t.muted)))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(k.name || k.program?.name || k.address.split("/").pop()))
+        .when(Boolean(k.created_ms), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(ago(k.created_ms))))),
+    ];
+  }
+
   render() {
     const t = theme();
     const collapsed = narrow();
@@ -496,6 +532,7 @@ export default class Spaces extends View {
           .on_click(() => { const v = switched() ? (shared("machine.view") ?? null) : null; run("space.new", v ? { machine: v } : {}); }).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children(this.grouped(t, collapsed)));
+        .children(this.grouped(t, collapsed))
+        .when(!collapsed, (el) => el.children(this.background(t))));
   }
 }

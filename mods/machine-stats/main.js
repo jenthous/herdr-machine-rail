@@ -20,7 +20,7 @@ import { makeUpdater } from "./update.js";
 // Part of Machine Rail: same release, same update state as machine-switch's header.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.3.1",
+  version: "0.4.0",
   key: "machine-rail.update",
   mod: "machine-stats",
   name: "Machine Rail",

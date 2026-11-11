@@ -18,11 +18,16 @@
 // herdr-core updates: a tile whose computer runs an older hc than the newest
 // gets an ↑ badge; its header offers to update it (core.js).
 //
-// Keys (keys.json): machine-switch.next / prev / go:N / session-next / session-prev / rename.
+// A tile shows, first that is set: a picture, an icon, letters/emoji (shared
+// "machine.prefs".icon), else two letters of its name (this computer: a monitor).
+// "Change icon…" in its menu opens the editor (props.iconFor). Pictures are
+// cropped square and kept in mods/machine-switch/icons/user/ (this computer only).
+//
+// Keys (keys.json): machine-switch.next / prev / go:N / session-next / session-prev / rename / icon.
 
-import { View, div, svg } from "gpui-kit";
+import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { hc, theme, spaces, agents, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
+import { hc, exec, appHome, theme, spaces, agents, run, shared, setShared, props, openOverlay, closeOverlay, nextCommand } from "herdr";
 import { T, detectLanguage, currentLang } from "./i18n.js";
 import { makeUpdater } from "./update.js";
 import { latestCore, checkCore, localCore, behind, updateCore } from "./core.js";
@@ -30,7 +35,7 @@ import { latestCore, checkCore, localCore, behind, updateCore } from "./core.js"
 // Release check: the header shows "Update Machine Rail" when a newer release is out.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.3.1",
+  version: "0.4.0",
   key: "machine-rail.update",
   mod: "machine-switch",
   name: "Machine Rail",
@@ -54,12 +59,33 @@ const COLORS = {
 };
 
 const LOCAL = "@local";
+// Icons a tile can wear (Lucide, mods/machine-switch/icons).
+const ICONS = [
+  "cat", "dog", "bird", "fish", "rabbit", "turtle", "squirrel", "snail", "bug", "panda", "paw-print", "ghost", "skull", "bot", "crown", "gem",
+  "flame", "zap", "sparkles", "sun", "moon", "star", "heart", "snowflake", "rainbow", "cloud-lightning", "leaf", "tree-pine", "flower", "mountain", "waves", "shell",
+  "coffee", "pizza", "cherry", "apple", "citrus", "banana", "carrot", "cake", "ice-cream-cone", "cookie", "croissant", "beer", "anchor", "plane", "car", "sailboat",
+  "bike", "music", "headphones", "camera", "palette", "dice-5", "puzzle", "trophy", "swords", "shield", "key", "brain", "atom", "telescope", "orbit", "satellite",
+  "compass", "castle", "tent", "umbrella", "feather", "origami", "wand-sparkles", "hourglass",
+  "server", "laptop", "monitor", "cpu", "cloud", "database", "house", "building", "gamepad", "tv", "smartphone", "box", "rocket", "flask", "globe", "terminal",
+];
+const MI = (name) => `mods/machine-switch/icons/${name}.svg`;
+// Characters as a person counts them (an emoji with a skin tone is one).
+function chars(s) {
+  try { return [...new Intl.Segmenter().segment(s)].map((x) => x.segment); } catch { return Array.from(s); }
+}
+let EMOJI;
+try { EMOJI = new RegExp("\\p{Extended_Pictographic}", "u"); } catch { EMOJI = /[\u2600-\u27bf]|[\ud83c-\udbff]/; }
+const initials = (label) => {
+  const words = label.replace(/[-_.]?mac$/i, "").split(/[\s\-_.]+/).filter(Boolean);
+  const s = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? label).slice(0, 2);
+  return s.toUpperCase();
+};
 const gKey = (key) => `g:${key}`;
 const sKey = (name) => `s:${name ?? LOCAL}`;
 
 function prefs() {
   const p = shared("machine.prefs") ?? {};
-  return { order: p.order ?? [], sessionOrder: p.sessionOrder ?? {}, alias: p.alias ?? {}, color: p.color ?? {} };
+  return { order: p.order ?? [], sessionOrder: p.sessionOrder ?? {}, alias: p.alias ?? {}, color: p.color ?? {}, icon: p.icon ?? {} };
 }
 function setPrefs(change) {
   const p = prefs();
@@ -116,6 +142,7 @@ export default class MachineSwitch extends View {
     cx.spawn(async (cx) => { await detectLanguage(); cx.notify(); });
     if (props()?.role === "update") { this.update = new UPDATER.Update(); return this.update.init(cx); }
     if (props()?.menu) return this.initMenu(cx);
+    if (props()?.iconFor) return this.initIcon(cx);
     this.lastActive = spaces().find((s) => s.active)?.id ?? null;
     this.refresh(cx);
     cx.timer.every(15000, (cx) => this.refresh(cx));
@@ -241,6 +268,11 @@ export default class MachineSwitch extends View {
       const n = cur.sessions.length;
       this.choose(cur.sessions[(si + (name === "session-next" ? 1 : n - 1)) % n].name, cur.key);
     } else if (name === "rename") this.openMenu({ kind: "group", key: cur.key }, true, { x: 60, y: 60 });
+    else if (name === "icon") openOverlay({ mod: "machine-switch", kind: "popup", at: { x: 60, y: 60 }, width: 360, height: 560, props: { iconFor: cur.key } });
+  }
+
+  openIcon(key) {
+    openOverlay({ mod: "machine-switch", kind: "popup", at: "pointer", width: 360, height: 560, props: { iconFor: key } });
   }
 
   openMenu(menu, rename = false, at = "pointer") {
@@ -283,16 +315,32 @@ export default class MachineSwitch extends View {
       });
   }
 
+  // A tile's square and what it shows (see the top): `on` is the chosen one.
+  tileBox(t, g, size, on, away = false) {
+    const p = prefs();
+    const ic = p.icon[gKey(g.key)] ?? {};
+    const fill = COLORS[g.color] ?? null;
+    const k = size / 36, r = 10 * k;
+    const box = div().relative().size(size).flex_none().flex().items_center().justify_center().rounded(r).font_bold()
+      .when(Boolean(fill), (el) => (on ? el.bg(fill).text_color("#ffffff") : el.bg(fill + "2e").text_color(fill)))
+      .when(!fill, (el) => el.bg(on ? t.accent : t.surface).text_color(on ? t.accent_foreground : t.muted))
+      .when(away, (el) => el.opacity(0.45));
+    if (ic.image) return box.child(image(ic.image).w(size).h(size).rounded(r));
+    if (ic.glyph) return box.child(svg(MI(ic.glyph)).size(17 * k));
+    if (ic.text) {
+      const c = chars(ic.text);
+      const emoji = c.length === 1 && EMOJI.test(c[0]);
+      return box.child(div().text_size((emoji ? 19 : c.length >= 3 ? 10 : 11.5) * k).child(ic.text));
+    }
+    if (g.key === LOCAL && !p.alias[gKey(LOCAL)]) return box.child(svg(I("monitor")).size(15 * k));
+    return box.text_size(11.5 * k).child(initials(g.label));
+  }
+
   // ---- the rail ----
 
   rail(t, groups) {
     const current = this.current(groups);
     const p = prefs();
-    const initials = (label) => {
-      const words = label.replace(/[-_.]?mac$/i, "").split(/[\s\-_.]+/).filter(Boolean);
-      const s = words.length > 1 ? words[0][0] + words[1][0] : (words[0] ?? label).slice(0, 2);
-      return s.toUpperCase();
-    };
     const ids = groups.map((g) => g.key);
     return v_flex()
       .id("ms-rail")
@@ -309,28 +357,14 @@ export default class MachineSwitch extends View {
           const on = g === current;
           const n = tally(g.sessions.map((s) => s.name ?? null));
           const away = g.sessions.every((s) => s.state && s.state !== "connected");
-          const fill = COLORS[g.color] ?? null;
           const old = g.outdated.length > 0;
           const dropping = this.pressed?.kind === "group" && this.over === g.key && this.pressed.id !== g.key;
-          const tile = div()
+          const tile = this.tileBox(t, g, 36, on, away)
             .id(`ms-rail-${g.key}`)
-            .relative()
-            .size(36)
-            .flex_none()
-            .flex()
-            .items_center()
-            .justify_center()
-            .rounded(10)
-            .text_size(11.5)
-            .font_bold()
             .cursor_pointer()
-            .when(Boolean(fill), (el) => (on ? el.bg(fill).text_color("#ffffff") : el.bg(fill + "2e").text_color(fill)))
-            .when(!fill, (el) => el.bg(on ? t.accent : t.surface).text_color(on ? t.accent_foreground : t.muted))
-            .when(!on, (el) => el.hover((x) => x.opacity(0.8)))
-            .when(away, (el) => el.opacity(0.45))
+            .when(!on && !away, (el) => el.hover((x) => x.opacity(0.8)))
             .when(dropping, (el) => el.border_2().border_color(t.accent))
             .on_mouse_down("right", () => this.openMenu({ kind: "group", key: g.key }))
-            .child(g.key === LOCAL && !p.alias[gKey(LOCAL)] ? svg(I("monitor")).size(15) : initials(g.label))
             .when(g.sessions.length > 1, (el) =>
               el.child(div().absolute().right(-6).bottom(-6).px(3).rounded(5).bg(t.canvas).border_1().border_color(t.border).text_size(9).text_color(t.muted).child(String(g.sessions.length))),
             )
@@ -625,6 +659,7 @@ export default class MachineSwitch extends View {
               .child("×"),
           ]),
       )
+      .when(group, (el) => el.child(this.item(t, "ms-icon", T("changeIcon"), () => { close(); this.openIcon(m.key); })))
       .child(div().h(1).mx(6).my(2).bg(t.border))
       .child(this.item(t, "ms-up", group ? T("up") : T("left"), () => this.move(-1)))
       .child(this.item(t, "ms-down", group ? T("down") : T("right"), () => this.move(1)))
@@ -632,10 +667,165 @@ export default class MachineSwitch extends View {
       .child(this.item(t, "ms-manage", T("manageSessions"), () => { close(); run("mod.open", { name: "sessions" }); }, "⌘⇧S"));
   }
 
+  // ---- the icon editor (props.iconFor: a tile's key) ----
+
+  initIcon(cx) {
+    this.handle = cx.focus_handle();
+    this.msg = null;
+    this.busy = false;
+    this.text = InputState.new({});
+    this.text.set_value(prefs().icon[gKey(props().iconFor)]?.text ?? "");
+    this.text.on("change", (_e, cx) => {
+      const v = this.text.value();
+      const c = chars(v.trim());
+      const cut = c.slice(0, c.length && EMOJI.test(c[0]) ? 1 : 3).join("");
+      if (cut !== v.trim()) { this.text.set_value(cut); return; }
+      // letters typed replace an icon; a picture still wins until removed
+      this.setIcon((ic) => { ic.text = cut || null; if (cut) ic.glyph = null; });
+      cx.notify();
+    });
+    cx.timer.after(50, () => this.handle.focus());
+    this.refresh(cx);
+  }
+
+  setIcon(change) {
+    const k = gKey(props().iconFor);
+    setPrefs((p) => {
+      const ic = { ...(p.icon[k] ?? {}) };
+      change(ic);
+      for (const f of Object.keys(ic)) if (!ic[f]) delete ic[f];
+      if (Object.keys(ic).length) p.icon[k] = ic;
+      else delete p.icon[k];
+    });
+  }
+
+  // A picture from a dropped file, or (src null) from the clipboard: an image, or a
+  // copied image file. Cropped to a square in the middle and scaled to 128 px
+  // (macOS sips; elsewhere a dropped file is copied as it is).
+  savePicture(src, cx) {
+    if (this.busy) return;
+    this.busy = true;
+    this.msg = T("iconSaving");
+    cx.notify();
+    const key = props().iconFor;
+    const name = `${key.replace(/[^a-zA-Z0-9_-]/g, "_")}-${Date.now()}.png`;
+    const rel = `mods/machine-switch/icons/user/${name}`;
+    const script = [
+      'set -e; dir="$1"; out="$1/$2"; src="$3"; tmp="$out.tmp.png"; mkdir -p "$dir"',
+      'if [ -z "$src" ]; then',
+      '  command -v osascript >/dev/null || exit 3',
+      '  if ! osascript -e "set f to open for access POSIX file \"$tmp\" with write permission" -e "set eof f to 0" -e "write (the clipboard as «class PNGf») to f" -e "close access f" >/dev/null 2>&1; then',
+      '    rm -f "$tmp"; src=$(osascript -e "POSIX path of (the clipboard as «class furl»)" 2>/dev/null) || exit 3',
+      '  fi',
+      'fi',
+      'if ! command -v sips >/dev/null; then [ -n "$src" ] && cp "$src" "$out" && exit 0; exit 4; fi',
+      'if [ -n "$src" ]; then sips -s format png "$src" --out "$tmp" >/dev/null 2>&1 || { rm -f "$tmp"; exit 4; }; fi',
+      'w=$(sips -g pixelWidth "$tmp" | awk \'/pixelWidth/{print $2}\'); h=$(sips -g pixelHeight "$tmp" | awk \'/pixelHeight/{print $2}\')',
+      'm=$w; [ "$h" -lt "$m" ] && m=$h',
+      'sips -c "$m" "$m" "$tmp" >/dev/null && sips -Z 128 "$tmp" >/dev/null && mv "$tmp" "$out"',
+    ].join("\n");
+    cx.spawn(async (cx) => {
+      let r;
+      try { r = await exec("sh", ["-c", script, "sh", `${appHome()}/mods/machine-switch/icons/user`, name, src ?? ""]); } catch (e) { r = { code: 1, stderr: String(e) }; }
+      this.busy = false;
+      if (r.code === 0) {
+        const old = prefs().icon[gKey(key)]?.image;
+        this.setIcon((ic) => { ic.image = rel; });
+        if (old?.startsWith("mods/machine-switch/icons/user/")) exec("rm", ["-f", `${appHome()}/${old}`]).catch(() => {});
+        this.msg = null;
+      } else this.msg = r.code === 3 ? T("iconNoImage") : r.code === 4 ? T("iconBadFile") : (r.stderr || "").trim().split("\n").pop() || T("iconBadFile");
+      cx.notify();
+    });
+  }
+
+  removePicture() {
+    const old = prefs().icon[gKey(props().iconFor)]?.image;
+    this.setIcon((ic) => { ic.image = null; });
+    if (old?.startsWith("mods/machine-switch/icons/user/")) exec("rm", ["-f", `${appHome()}/${old}`]).catch(() => {});
+  }
+
+  iconView(t) {
+    const key = props().iconFor;
+    const g = this.groups().find((x) => x.key === key);
+    const close = () => closeOverlay(props().overlay);
+    if (!g) return div().id("ms-icon").size_full().bg(t.popover);
+    const ic = prefs().icon[gKey(key)] ?? {};
+    const color = prefs().color[gKey(key)] ?? null;
+    const label = (s) => div().text_size(11.5).text_color(t.muted).mb(5).child(s);
+    const small = (s, el) => v_flex().items_center().gap(4).text_size(10.5).text_color(t.dim).child(el).child(s);
+    const btn = (id, s, primary, action) => div().id(id).h(28).px(12).flex().items_center().rounded(7).border_1().text_size(12.5).cursor_pointer()
+      .border_color(primary ? t.accent : t.border).bg(primary ? t.accent : t.popover).text_color(primary ? t.accent_foreground : t.muted)
+      .hover((x) => x.opacity(0.85)).on_click((_e, cx) => { action(cx); cx.notify(); }).child(s);
+    return v_flex()
+      .id("ms-icon")
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => {
+        if (e.key === "escape") { close(); cx.stop_propagation(); return; }
+        // ⌘V with no text on the clipboard: a picture (text goes to the letters field)
+        if (e.key === "v" && e.modifiers?.platform && cx.read_from_clipboard?.() == null) { this.savePicture(null, cx); cx.stop_propagation(); }
+      })
+      .size_full().p(14).gap(12).bg(t.popover).text_color(t.foreground)
+      .child(h_flex().items_center()
+        .child(div().flex_1().truncate().text_size(13.5).font_semibold().child(T("iconTitle", g.label)))
+        .child(div().id("ms-icon-x").px(4).text_color(t.dim).cursor_pointer().hover((x) => x.text_color(t.foreground)).on_click(() => close()).child("×")))
+      // how it looks: big, then chosen / not chosen / offline at rail size
+      .child(h_flex().gap(14).items_center()
+        .child(this.tileBox(t, g, 56, true))
+        .child(small(T("iconSelected"), div().rounded(11).border_2().border_color(t.accent).child(this.tileBox(t, g, 36, true))))
+        .child(small(T("iconNormal"), this.tileBox(t, g, 36, false)))
+        .child(small(T("iconAway"), this.tileBox(t, g, 36, false, true))))
+      .child(v_flex()
+        .child(label(T("iconText")))
+        .child(h_flex().gap(8).items_center()
+          .child(div().relative().flex_1()
+            .child(Input.new(this.text).w_full().h(30).px(8).items_center().rounded(7).border_1().border_color(ic.text ? t.accent : t.border).bg(t.background).text_size(13))
+            .when(!this.text.value(), (el) => el.child(div().absolute().left(9).top(7).text_size(12.5).text_color(t.dim).child(T("iconAuto", g.key === LOCAL && !prefs().alias[gKey(LOCAL)] ? "🖥" : initials(g.label))))))
+          .child(div().flex_none().text_size(11).text_color(t.dim).child(T("iconTextHint")))))
+      .child(v_flex()
+        .child(label(T("iconGlyph")))
+        .child(div().id("ms-glyphs").h(132).overflow_y_scrollbar().child(h_flex().flex_wrap().gap(4).children(ICONS.map((n) =>
+          div().id(`ms-glyph-${n}`).w(37).h(30).flex().items_center().justify_center().rounded(7).cursor_pointer()
+            .text_color(ic.glyph === n ? t.foreground : t.muted)
+            .when(ic.glyph === n, (el) => el.bg(t.hover).border_1().border_color(t.accent))
+            .hover((x) => x.bg(t.hover).text_color(t.foreground))
+            .on_click((_e, cx) => { this.setIcon((x) => { x.glyph = x.glyph === n ? null : n; }); cx.notify(); })
+            .child(svg(MI(n)).size(16)))))))
+      .child(v_flex()
+        .child(label(T("iconImage")))
+        .child(h_flex().gap(8)
+          .child(h_flex().id("ms-drop").flex_1().h(46).gap(8).items_center().justify_center().rounded(9).border_1().border_dashed()
+            .border_color(ic.image ? t.accent : t.input ?? t.border).text_size(12).text_color(t.muted)
+            .on_drop((e, cx) => { if (e.paths?.[0]) this.savePicture(e.paths[0], cx); })
+            .child(svg(MI("image")).size(16))
+            .child(T("iconDrop"))
+            .child(div().id("ms-paste").px(6).h(22).flex().items_center().rounded(5).border_1().border_color(t.border).bg(t.background)
+              .text_size(11.5).text_color(t.foreground).cursor_pointer().hover((x) => x.bg(t.hover))
+              .on_click((_e, cx) => this.savePicture(null, cx)).child(T("iconPaste"))))
+          .when(Boolean(ic.image), (el) => el.child(btn("ms-unpic", T("iconRemove"), false, () => this.removePicture()))))
+        .when(Boolean(this.msg), (el) => el.child(div().mt(5).text_size(11).text_color(this.busy ? t.dim : t.blocked).child(this.msg))))
+      .child(v_flex()
+        .child(label(T("iconColor")))
+        .child(h_flex().gap(6).items_center().children([
+          ...Object.entries(COLORS).map(([name, hex]) => div().id(`ms-icolor-${name}`).size(18).rounded(9).bg(hex).cursor_pointer()
+            .when(color === name, (el) => el.border_2().border_color(t.foreground))
+            .hover((x) => x.opacity(0.8))
+            .on_click((_e, cx) => { setPrefs((p) => (p.color[gKey(key)] = name)); cx.notify(); })),
+          div().id("ms-icolor-none").size(18).rounded(9).border_1().border_color(t.input ?? t.border).cursor_pointer()
+            .flex().items_center().justify_center().text_size(10).text_color(t.dim)
+            .when(!color, (el) => el.border_2().border_color(t.foreground))
+            .on_click((_e, cx) => { setPrefs((p) => delete p.color[gKey(key)]); cx.notify(); }).child("×"),
+        ])))
+      .child(div().flex_1())
+      .child(h_flex().gap(6).justify_end()
+        .child(btn("ms-ireset", T("iconReset"), false, () => { this.removePicture(); this.setIcon((ic) => { ic.text = null; ic.glyph = null; }); this.text.set_value(""); }))
+        .child(btn("ms-idone", T("iconDone"), true, () => close())));
+  }
+
   render() {
     if (this.update) return this.update.render();
     const t = theme();
     if (props()?.menu) return this.menuView(t);
+    if (props()?.iconFor) return this.iconView(t);
     const groups = this.groups();
     this.follow();
     if ((props()?.style ?? "rail") === "chips") return this.header(t, groups);
