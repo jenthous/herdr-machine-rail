@@ -11,9 +11,10 @@ herdr-core runs separate sessions on one computer (`HC_SESSION`, `hc machine add
 ## Features
 
 - **Rail.** One tile per computer (machine entries grouped by `host`), this one first. A small count when it has several sessions; a dot when an agent there is blocked, done or working while you look elsewhere.
-- **Session chips.** The chosen computer's sessions with their space counts; `+` opens the Sessions window.
+- **Session chips.** The chosen computer's sessions with their space counts; `+` opens the Sessions window. A session with an agent working has a breathing border; blocked or done, a dot.
 - **Filtered sidebar.** Spaces and Agents show only the chosen session. When a space elsewhere becomes active (`agent.next`, a notification, the picker), the rail follows it; when the space you were on closes, it stays. Switching returns to the space you last had there.
 - **Background.** Under the spaces, terminals running with no tab and no parent shown in one (`hc run --bg --no-parent`, a script started outside Herdr); click to peek.
+- **Keys.** `⌃⌘↑` / `⌃⌘↓` computers, `⌃⌘←` / `⌃⌘→` sessions, `⌘⌥[` / `⌘⌥]` spaces as the sidebar lists them (`⌃1`…`⌃9` the Nth), `⌃⌘R` rename.
 - **Space rows.** Each space shows its agents' state where the avatar was (working spins, blocked dot, done check, idle ring). Right-click for a color (a thin stripe; none by default). Spaces named after a Linear issue (`ENG-142 …`) get a chip with its state, when a Linear API key is found; without one, nothing is asked.
 - **Yours.** Right-click a tile or chip: rename, one of nine muted colors, move up/down. Or drag to reorder.
 - **Tile icons.** Right-click a tile → "Change icon…": letters or an emoji, one of 88 icons (Lucide), or a picture (drop a file, or ⌘V on macOS; cropped square, kept on this computer). The window previews the tile chosen, not chosen and offline. Names are display only (an `hc machine rename` would change terminal addresses).

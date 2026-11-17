@@ -15,6 +15,17 @@
     "ctrl-cmd-6": "machine-switch.go:6",
     "ctrl-cmd-7": "machine-switch.go:7",
     "ctrl-cmd-8": "machine-switch.go:8",
-    "ctrl-cmd-9": "machine-switch.go:9"
+    "ctrl-cmd-9": "machine-switch.go:9",
+    "cmd-alt-]": "session-spaces.next",
+    "cmd-alt-[": "session-spaces.prev",
+    "ctrl-1": "session-spaces.go:1",
+    "ctrl-2": "session-spaces.go:2",
+    "ctrl-3": "session-spaces.go:3",
+    "ctrl-4": "session-spaces.go:4",
+    "ctrl-5": "session-spaces.go:5",
+    "ctrl-6": "session-spaces.go:6",
+    "ctrl-7": "session-spaces.go:7",
+    "ctrl-8": "session-spaces.go:8",
+    "ctrl-9": "session-spaces.go:9"
   }
 }

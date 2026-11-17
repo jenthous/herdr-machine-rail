@@ -2,6 +2,11 @@
 
 The update window in the app shows the release notes of the newest release; they are written from this file.
 
+## v0.5.0
+
+- **Space keys follow the sidebar:** `⌘⌥]` / `⌘⌥[` go to the next / previous space as the sidebar lists them, top to bottom, staying on the chosen computer's session (back to the top after the last). `⌃1`…`⌃9` pick the Nth space shown. Herdr's own `space.next` and `space.select` count every machine's spaces in the order they were made, so they jumped to other computers. New commands `session-spaces.next|prev|go:N`; merge `keys.json` to use them.
+- **Working sessions breathe:** a session chip with an agent working shows a slowly brightening and fading border instead of a yellow dot. Blocked and done keep their dots.
+
 ## v0.4.0
 
 - **Change a computer's icon:** right-click a tile → "Change icon…". Pick letters or an emoji (up to 3 characters, or one emoji), one of 88 icons (animals, weather, food, things, and the plain machine ones), or a picture: drop an image file on it or press ⌘V (macOS). Pictures are cropped to a square and kept on this computer only. The window shows the tile chosen, not chosen and offline, and has the colors too. `machine-switch.icon` opens it for the current computer.

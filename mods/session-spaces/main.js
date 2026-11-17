@@ -13,10 +13,14 @@
 // Under the spaces, "Background": terminals running with no tab and no parent
 // shown in one (`hc run --bg --no-parent`, a script started outside Herdr), on
 // the shown machine entry; a click peeks at one (terminal.peek: keep-as-tab there).
+//
+// Keys (keys.json): session-spaces.next / prev / go:N move through the spaces as
+// this list shows them, top to bottom (only the chosen machine entry's with
+// machine-switch; Herdr's space.next goes through every machine's).
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { spaces, machines, panes, terminals, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile } from "herdr";
+import { spaces, machines, panes, terminals, run, openOverlay, exec, hc, theme, shared, setShared, watchFolder, window, layout, appHome, readTextFile, nextCommand } from "herdr";
 import * as Linear from "./linear.js";
 
 function find(node, id) {
@@ -105,6 +109,38 @@ export default class Spaces extends View {
     // `git status` walks the whole tree, on another machine a process there:
     // only when its answer could have changed (see `due`).
     cx.timer.every(250, (cx) => this.checkNew(cx));
+    cx.spawn(async (cx) => {
+      for (;;) {
+        let c;
+        try { c = await nextCommand(); } catch { return; }
+        if (!c) return;
+        this.command(String(c));
+        cx.notify();
+      }
+    });
+  }
+
+  // The spaces as listed, top to bottom: the chosen entry's, or every unfolded machine's.
+  listed() {
+    const rows = this.ordered();
+    if (switched()) {
+      const view = shared("machine.view") ?? null;
+      return rows.filter((r) => (r.w.machine ?? null) === view).map((r) => r.w);
+    }
+    const remote = [...new Set(rows.map((r) => r.w.machine).filter(Boolean))].sort();
+    return [null, ...remote].filter((m) => !(m && this.folded.has(m))).flatMap((m) => rows.filter((r) => (r.w.machine ?? null) === m).map((r) => r.w));
+  }
+
+  command(c) {
+    const [name, arg] = c.replace(/^session-spaces\./, "").split(/[:\s]+/, 2);
+    const list = this.listed();
+    if (!list.length) return;
+    const i = list.findIndex((w) => w.active);
+    let target = null;
+    if (name === "next") target = list[(i + 1) % list.length];
+    else if (name === "prev") target = list[(i < 0 ? 0 : i + list.length - 1) % list.length];
+    else if (name === "go") target = list[Number(arg) - 1] ?? null;
+    if (target && !target.active) run("space.select", { id: target.id });
   }
 
   checkNew(cx) {

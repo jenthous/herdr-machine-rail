@@ -35,7 +35,7 @@ import { latestCore, checkCore, localCore, behind, updateCore } from "./core.js"
 // Release check: the header shows "Update Machine Rail" when a newer release is out.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.4.0",
+  version: "0.5.0",
   key: "machine-rail.update",
   mod: "machine-switch",
   name: "Machine Rail",
@@ -285,6 +285,16 @@ export default class MachineSwitch extends View {
       .flex().items_center().justify_center().text_size(9).font_bold().text_color("#ffffff").child(n > 99 ? "99+" : String(n));
   }
 
+  // A session with an agent working: its chip's border breathes (an outline over it, its opacity
+  // looping natively). A light running round the edge can't be drawn: a turning svg paints over
+  // everything, so it can't be kept to a ring.
+  orbit(t, id, chip) {
+    return div().id(`ms-orbit-${id}`).relative().flex_none()
+      .child(chip)
+      .child(div().absolute().left(0).top(0).right(0).bottom(0).rounded(6).border_1().border_color(t.working)
+        .loop("opacity", { from: 0.15, to: 0.72, period: 1800 }));
+  }
+
   dot(t, status, size = 6) {
     return div().flex_none().size(size).rounded(size / 2).bg(status === "blocked" ? t.blocked : status === "done" ? t.done : t.working);
   }
@@ -448,9 +458,9 @@ export default class MachineSwitch extends View {
             .when(Boolean(fill), (el) => el.child(div().flex_none().size(7).rounded(4).bg(fill)))
             .child(s.label)
             .child(div().text_size(10.5).text_color(t.dim).child(away ? s.state.replace(/_/g, " ") : String(n)))
-            .when(Boolean(st), (el) => el.child(this.dot(t, st)));
+            .when(Boolean(st) && st !== "working", (el) => el.child(this.dot(t, st)));
           return this.draggable(
-            chip,
+            st === "working" ? this.orbit(t, id, chip) : chip,
             "session",
             id,
             (from, to) => setPrefs((q) => (q.sessionOrder[current.key] = moved(ids, from, to))),
