@@ -45,9 +45,17 @@ const switched = () => shows(layout(), "machine-switch");
 
 // Where a space is now: its first terminal's live folder, else where it was made.
 // `ps`: panes(), read once by the caller (each read copies every pane).
+// Each tab's first pane with a folder, worked out once per panes() read.
+const firstCwd = new WeakMap();
 function place(s, ps) {
-  const tabs = new Set((s.tabs ?? []).map((c) => c.id));
-  return ps.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
+  let byTab = firstCwd.get(ps);
+  if (!byTab) {
+    byTab = new Map();
+    for (const p of ps) if (p.cwd && !byTab.has(p.tab)) byTab.set(p.tab, p.cwd);
+    firstCwd.set(ps, byTab);
+  }
+  for (const c of s.tabs ?? []) { const cwd = byTab.get(c.id); if (cwd) return cwd; }
+  return s.folder;
 }
 const rowHeight = ({ tree }) => (tree ? 28 : 30);
 const where = (s, ps) => JSON.stringify([s.machine ?? null, place(s, ps)]);
@@ -108,7 +116,7 @@ export default class Spaces extends View {
     cx.timer.every(15000, cx => this.refreshMachines(cx));
     // `git status` walks the whole tree, on another machine a process there:
     // only when its answer could have changed (see `due`).
-    cx.timer.every(250, (cx) => this.checkNew(cx));
+    cx.timer.every(1000, (cx) => this.checkNew(cx));
     cx.spawn(async (cx) => {
       for (;;) {
         let c;
@@ -147,9 +155,10 @@ export default class Spaces extends View {
     const now = Date.now();
     const sp = spaces();
     for (const s of sp) if (!this.shown.has(s.id)) this.born[s.id] ??= now;
-    const due = this.due(now, sp, panes());
+    const ps = panes();
+    const due = this.due(now, sp, ps);
     if (due.size) this.refreshGit(due, cx);
-    this.checkLinear(now, sp, cx);
+    this.checkLinear(now, sp, ps, cx);
     if (sp.some((s) => !this.shown.has(s.id))) cx.notify();
   }
 
@@ -194,10 +203,9 @@ export default class Spaces extends View {
     return m.idsIn(w.name)[0] ?? m.idsIn(w.branch ?? g?.branch)[0] ?? null;
   }
 
-  checkLinear(now, sp, cx) {
+  checkLinear(now, sp, ps, cx) {
     const lin = this.lin;
     if (lin.busy || lin.key === null) return;
-    const ps = panes();
     const ids = [...new Set(sp.map((w) => this.issueOf(w, this.git[where(w, ps)])).filter(Boolean))].sort();
     const key = ids.join(" ");
     if (!ids.length || (key === lin.ids && now - lin.at < LINEAR_EVERY)) return;
@@ -308,8 +316,7 @@ export default class Spaces extends View {
   }
 
   // Spaces in order, each worktree space moved under its main checkout's.
-  ordered() {
-    const sp = spaces(), ps = panes();
+  ordered(sp = spaces(), ps = panes()) {
     const ready = (w) => this.shown.has(w.id) || where(w, ps) in this.git || Date.now() - (this.born[w.id] ??= Date.now()) > 1500;
     for (const w of sp) if (!this.shown.has(w.id) && ready(w)) this.shown.add(w.id);
     const list = sp.map((w, i) => ({ w, i, g: this.git[where(w, ps)] ?? null })).filter((r) => this.shown.has(r.w.id));
@@ -336,14 +343,14 @@ export default class Spaces extends View {
       .child(svg("mods/workspace-chrome/plus.svg").size(12)).when(!collapsed, (el) => el.child("New space"));
   }
 
-  grouped(t, collapsed) {
-    return switched() ? this.chosen(t, collapsed) : this.all(t, collapsed);
+  grouped(t, collapsed, sp, ps) {
+    return switched() ? this.chosen(t, collapsed, sp, ps) : this.all(t, collapsed, sp, ps);
   }
 
   // The rows of the machine entry machine-switch chose; its tabs are in machine-switch.
-  chosen(t, collapsed) {
+  chosen(t, collapsed, sp, ps) {
     const view = shared("machine.view") ?? null;
-    const rows = this.ordered().filter((r) => (r.w.machine ?? null) === view);
+    const rows = this.ordered(sp, ps).filter((r) => (r.w.machine ?? null) === view);
     const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
     const machine = view && this.machines.find((k) => k.name === view);
     if (view && machine && machine.state !== "connected")
@@ -355,8 +362,8 @@ export default class Spaces extends View {
 
   // Every machine's rows, under a header per machine once one isn't this computer.
   // A header folds its machine (kept in localStorage) and has a + for a space there.
-  all(t, collapsed) {
-    const rows = this.ordered();
+  all(t, collapsed, sp, ps) {
+    const rows = this.ordered(sp, ps);
     const draw = (r) => (collapsed ? this.compact(r, t) : this.row(r, t));
     const remote = [...new Set([...rows.map((r) => r.w.machine).filter(Boolean), ...this.machines.map((m) => m.name)])].sort();
     if (!remote.length) return rows.length ? rows.map(draw) : [this.newRow(t, collapsed, null)];
@@ -511,8 +518,7 @@ export default class Spaces extends View {
   }
 
   // Live terminals of the shown entry that no tab shows, directly or under a parent.
-  loose() {
-    const ps = panes();
+  loose(ps = panes()) {
     const inPane = new Set(ps.map((p) => p.terminal).filter(Boolean));
     const all = terminals();
     const live = new Map(all.map((k) => [k.address, k.state === "live"]));
@@ -526,8 +532,8 @@ export default class Spaces extends View {
     });
   }
 
-  background(t) {
-    const list = this.loose();
+  background(t, ps) {
+    const list = this.loose(ps);
     if (!list.length) return [];
     const ago = (ms) => { const m = Math.floor((Date.now() - ms) / 60000); return m < 1 ? "<1m" : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`; };
     return [
@@ -550,7 +556,7 @@ export default class Spaces extends View {
     // A color is never dropped because its space is missing: right after start a
     // remote machine's spaces aren't listed until it connects. Only NO_COLOR
     // entries of missing spaces go, since they say nothing a new entry wouldn't.
-    const sp = spaces();
+    const sp = spaces(), ps = panes();
     const ids = new Set(sp.map(p => p.id));
     const stored = shared("space.colors") ?? {};
     const kept = Object.fromEntries(Object.entries(stored).filter(([id, c]) => ids.has(id) || c !== NO_COLOR));
@@ -568,7 +574,7 @@ export default class Spaces extends View {
           .on_click(() => { const v = switched() ? (shared("machine.view") ?? null) : null; run("space.new", v ? { machine: v } : {}); }).child(svg("mods/workspace-chrome/plus.svg").size(14))))
       .child(v_flex().flex_1().min_h(0).px(8).pb(14).overflow_y_scrollbar().mode("always")
         .on_mouse_up("left", (_e, cx) => { this.pressed = null; cx.notify(); })
-        .children(this.grouped(t, collapsed))
-        .when(!collapsed, (el) => el.children(this.background(t))));
+        .children(this.grouped(t, collapsed, sp, ps))
+        .when(!collapsed, (el) => el.children(this.background(t, ps))));
   }
 }

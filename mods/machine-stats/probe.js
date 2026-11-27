@@ -24,5 +24,5 @@ $b" | awk '{idle=$5+$6; tot=0; for(i=2;i<=NF;i++) tot+=$i; if (NR==1){i0=idle;t0
   d=/
 fi
 df -kP $d | awk 'NR==2{printf "disktotal=%.0f\ndiskused=%.0f\n", $2*1024, ($2-$4)*1024}'
-ps -Ao pcpu=,rss=,comm= 2>/dev/null | sort -rn | head -5 | sed 's/^ */proc=/'
+ps -Ao pid=,pcpu=,rss=,time=,etime=,comm= 2>/dev/null | sort -k2,2 -rn | head -5 | sed 's/^ */proc=/'
 `;

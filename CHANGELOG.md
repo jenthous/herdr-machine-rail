@@ -2,6 +2,11 @@
 
 The update window in the app shows the release notes of the newest release; they are written from this file.
 
+## v0.5.1
+
+- **Sidebar error fixed:** the spaces list sometimes showed "This view could not be re-rendered; showing the last version that worked (interrupted)". Its background check ran four times a second and, for every space, searched every pane again; it now runs once a second, looks each tab's folder up once per pass, and reads the spaces and panes once per draw. Its slowest pass went from 120 ms to 26 ms.
+- **Machine Stats, how long processes have run:** the process list has a header and a "CPU time / running" column, and a process that has stayed busy (20% CPU or more) for a minute or longer gets a "busy 3m" badge.
+
 ## v0.5.0
 
 - **Space keys follow the sidebar:** `⌘⌥]` / `⌘⌥[` go to the next / previous space as the sidebar lists them, top to bottom, staying on the chosen computer's session (back to the top after the last). `⌃1`…`⌃9` pick the Nth space shown. Herdr's own `space.next` and `space.select` count every machine's spaces in the order they were made, so they jumped to other computers. New commands `session-spaces.next|prev|go:N`; merge `keys.json` to use them.

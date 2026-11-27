@@ -20,7 +20,7 @@ import { makeUpdater } from "./update.js";
 // Part of Machine Rail: same release, same update state as machine-switch's header.
 const UPDATER = makeUpdater({
   repo: "jenthous/herdr-machine-rail",
-  version: "0.5.0",
+  version: "0.5.1",
   key: "machine-rail.update",
   mod: "machine-stats",
   name: "Machine Rail",
@@ -30,6 +30,8 @@ const LANG_KEY = "machine-stats.lang";
 
 const REFRESH_MS = 5000;
 const LOCAL = "@local";
+const alpha = (c, a) => String(c).slice(0, 7) + a;
+const BUSY = 20; // % CPU that counts as busy for the "busy for" mark
 
 const STR = {
   en: {
@@ -52,6 +54,8 @@ const STR = {
     switchLangHint: "한국어로 보기 (l)",
     free: (b) => `${b} free`,
     details: (os, cores, up) => `${os} · ${cores} cores · up ${up}`,
+    procHead: ["CPU", "Memory", "CPU time / running", "Process"],
+    busyFor: (d) => `busy ${d}`,
   },
   ko: {
     title: "머신 자원",
@@ -73,6 +77,8 @@ const STR = {
     switchLangHint: "Show in English (l)",
     free: (b) => `${b} 남음`,
     details: (os, cores, up) => `${os} · ${cores}코어 · 가동 ${up}`,
+    procHead: ["CPU", "메모리", "CPU 쓴 시간 / 실행", "프로세스"],
+    busyFor: (d) => `${d}째 바쁨`,
   },
 };
 
@@ -95,7 +101,13 @@ function duration(s) {
   return d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-// key=value lines → a stats object. `proc=` lines are "pcpu rss(KB) command".
+// ps times: "[DD-][HH:]MM:SS[.ss]" (macOS's TIME is "MMMM:SS.ss") → seconds.
+function clock(v) {
+  const [d, rest] = v.includes("-") ? v.split("-") : ["0", v];
+  return parseInt(d, 10) * 86400 + rest.split(":").reduce((a, x) => a * 60 + parseFloat(x), 0);
+}
+
+// key=value lines → a stats object. `proc=` lines are "pid pcpu rss(KB) cputime etime command".
 function parse(out) {
   const s = { procs: [] };
   for (const line of out.split("\n")) {
@@ -103,8 +115,8 @@ function parse(out) {
     if (i < 0) continue;
     const k = line.slice(0, i), v = line.slice(i + 1).trim();
     if (k === "proc") {
-      const m = v.match(/^([\d.]+)\s+(\d+)\s+(.*)$/);
-      if (m) s.procs.push({ cpu: parseFloat(m[1]), rss: parseInt(m[2], 10) * 1024, name: m[3].split("/").pop() || m[3] });
+      const m = v.match(/^(\d+)\s+([\d.]+)\s+(\d+)\s+(\S+)\s+(\S+)\s+(.*)$/);
+      if (m) s.procs.push({ pid: m[1], cpu: parseFloat(m[2]), rss: parseInt(m[3], 10) * 1024, cputime: clock(m[4]), etime: clock(m[5]), name: m[6].split("/").pop() || m[6] });
     } else if (k === "os" || k === "host" || k === "load") s[k] = v;
     else s[k] = parseFloat(v);
   }
@@ -199,7 +211,13 @@ export default class MachineStats extends View {
         const r = await exec("sh", ["-c", PROBE], { on: m.on });
         const data = parse(r.stdout ?? "");
         if (!data.os) throw new Error((r.stderr || "no output").trim().split("\n").pop());
-        Object.assign(st, { data, at: Date.now(), error: null });
+        // how long each process has stayed busy, read to read, while this window is open
+        // (one quiet read in between doesn't end it: CPU use comes in bursts)
+        const now = Date.now(), was = st.busyFor ?? {};
+        st.busyFor = {};
+        for (const p of data.procs) if (p.cpu >= BUSY) st.busyFor[p.pid] = { from: was[p.pid]?.from ?? now, miss: 0 };
+        for (const [pid, b] of Object.entries(was)) if (!st.busyFor[pid] && b.miss < 1) st.busyFor[pid] = { from: b.from, miss: b.miss + 1 };
+        Object.assign(st, { data, at: now, error: null });
       } catch (e) {
         st.error = String(e?.message ?? e).slice(0, 160);
       } finally {
@@ -313,10 +331,22 @@ export default class MachineStats extends View {
         .when(d.swaptotal > 0, (el) => el.child(kv(T.swap, `${bytes(d.swapused)} / ${bytes(d.swaptotal)}`)))
         .child(kv(T.disk, `${bytes(d.diskused)} / ${bytes(d.disktotal)}`))
         .child(kv(T.load, d.load ?? "–")))
-      .child(v_flex().gap(2).children(d.procs.map((p, i) => h_flex().id(`mst-${m.key}-p${i}`).gap(10).items_center()
-        .child(div().w(54).flex_none().text_right().text_color(p.cpu >= 80 ? t.blocked : t.foreground).child(`${p.cpu.toFixed(1)}%`))
-        .child(div().w(64).flex_none().text_right().text_color(t.dim).child(bytes(p.rss)))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(p.name)))));
+      .child(v_flex().gap(2)
+        .child(h_flex().gap(10).text_size(10.5).text_color(t.dim)
+          .child(div().w(54).flex_none().text_right().child(T.procHead[0]))
+          .child(div().w(64).flex_none().text_right().child(T.procHead[1]))
+          .child(div().w(120).flex_none().text_right().child(T.procHead[2]))
+          .child(div().flex_1().child(T.procHead[3])))
+        .children(d.procs.map((p, i) => {
+          // busy since this window first saw it so: shown from a minute on
+          const from = this.stats[m.key]?.busyFor?.[p.pid]?.from, busy = from && Date.now() - from >= 60000 ? T.busyFor(duration((Date.now() - from) / 1000)) : null;
+          return h_flex().id(`mst-${m.key}-p${i}`).gap(10).items_center()
+            .child(div().w(54).flex_none().text_right().text_color(p.cpu >= 80 ? t.blocked : t.foreground).child(`${p.cpu.toFixed(1)}%`))
+            .child(div().w(64).flex_none().text_right().text_color(t.dim).child(bytes(p.rss)))
+            .child(div().w(120).flex_none().text_right().text_color(t.dim).child(`${duration(p.cputime)} / ${duration(p.etime)}`))
+            .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(p.name))
+            .when(Boolean(busy), (el) => el.child(div().flex_none().px(5).rounded(4).bg(alpha(t.working, "22")).text_color(t.working).text_size(10.5).child(busy)));
+        })));
   }
 
   // The one thing most worth a look: the busiest process anywhere, and any memory or disk at 85% or more.
